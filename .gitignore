@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+build/
+dist/
+.pytest_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+
+# Secrets
+.env
+
+# Data that must never be committed (plan/decisions/0004-data-handling.md)
+data/cases/private/*
+!data/cases/private/README.md
+data/sessions/*
+!data/sessions/.gitkeep
+data/study/
+results/**/raw/
+
+# OS / editors
+.DS_Store
+.idea/
+.vscode/

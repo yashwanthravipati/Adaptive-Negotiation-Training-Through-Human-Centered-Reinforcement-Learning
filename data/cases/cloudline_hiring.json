@@ -1,0 +1,84 @@
+{
+  "id": "cloudline_hiring",
+  "title": "Cloudline Hiring",
+  "source": "Synthetic case written for this project; free to use and commit.",
+  "public_brief": "Cloudline, a 60-person cloud-infrastructure startup, has extended a verbal offer to a senior software engineer. The recruiter and the candidate are meeting to settle the remaining terms of the written offer: base salary, signing bonus, remote days per week, start date, and vacation days. Both sides want to reach an agreement today if they can.",
+  "issues": [
+    {
+      "id": "salary",
+      "name": "Base salary",
+      "options": [
+        {"id": "s120", "label": "$120,000"},
+        {"id": "s130", "label": "$130,000"},
+        {"id": "s140", "label": "$140,000"},
+        {"id": "s150", "label": "$150,000"}
+      ]
+    },
+    {
+      "id": "bonus",
+      "name": "Signing bonus",
+      "options": [
+        {"id": "b0", "label": "None"},
+        {"id": "b10", "label": "$10,000"},
+        {"id": "b20", "label": "$20,000"}
+      ]
+    },
+    {
+      "id": "remote",
+      "name": "Remote days per week",
+      "options": [
+        {"id": "r0", "label": "Fully in office"},
+        {"id": "r2", "label": "2 days remote"},
+        {"id": "r4", "label": "4 days remote"}
+      ]
+    },
+    {
+      "id": "start",
+      "name": "Start date",
+      "options": [
+        {"id": "w2", "label": "In 2 weeks"},
+        {"id": "w4", "label": "In 4 weeks"},
+        {"id": "w8", "label": "In 8 weeks"}
+      ]
+    },
+    {
+      "id": "vacation",
+      "name": "Vacation days per year",
+      "options": [
+        {"id": "v15", "label": "15 days"},
+        {"id": "v20", "label": "20 days"},
+        {"id": "v25", "label": "25 days"}
+      ]
+    }
+  ],
+  "roles": [
+    {
+      "id": "candidate",
+      "name": "Candidate",
+      "confidential_brief": "You are a senior engineer with a competing offer from a larger company that you would take if this negotiation fails. You care most about salary and being able to work remotely: you have a long commute and a young child. The signing bonus is nice but matters less to you. You need about four weeks to hand off your current project; starting in two weeks would burn bridges with your current team, and eight weeks would delay your next paycheck uncomfortably.",
+      "points": {
+        "salary": {"s120": 0, "s130": 1500, "s140": 3000, "s150": 4500},
+        "bonus": {"b0": 0, "b10": 600, "b20": 1200},
+        "remote": {"r0": 0, "r2": 1200, "r4": 2400},
+        "start": {"w2": 0, "w4": 800, "w8": 600},
+        "vacation": {"v15": 0, "v20": 500, "v25": 1000}
+      },
+      "reservation_value": 3500,
+      "constraints": []
+    },
+    {
+      "id": "recruiter",
+      "name": "Cloudline Recruiter",
+      "confidential_brief": "You are Cloudline's head of talent. The founders want this hire but cash is tight before the next funding round, so a signing bonus is painful: it comes straight out of this quarter's runway. Salary matters but is easier to justify to the board. Cloudline is quietly moving to a remote-friendly policy, so remote days cost you little. A major project kicks off in four weeks and you would love the new hire there for it; eight weeks would mean missing the kickoff. If this fails you would fall back to a slower search with a recruiting agency.",
+      "points": {
+        "salary": {"s120": 4500, "s130": 3000, "s140": 1500, "s150": 0},
+        "bonus": {"b0": 2400, "b10": 1200, "b20": 0},
+        "remote": {"r0": 600, "r2": 300, "r4": 0},
+        "start": {"w2": 400, "w4": 800, "w8": 0},
+        "vacation": {"v15": 1000, "v20": 500, "v25": 0}
+      },
+      "reservation_value": 3000,
+      "constraints": []
+    }
+  ]
+}
