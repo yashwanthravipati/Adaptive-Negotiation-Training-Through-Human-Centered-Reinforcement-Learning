@@ -1,9 +1,10 @@
 """The counterpart agent: plays the other side from its hidden role sheet and profile.
 
-The LLM writes the dialogue and picks offers; code enforces the economics (decision 0003):
+The LLM writes dialogue and proposals; code enforces listed-offer economics (decision 0003):
 valid ids, never below the reservation value, and (unless ``enforce_schedule`` is off, for
 the prompt-only vs hybrid comparison in T-017) never below the current aspiration level.
 If the model keeps producing invalid moves, code makes a counteroffer instead of failing.
+Custom terms are evaluated qualitatively and remain unscored (decision 0006).
 """
 
 from __future__ import annotations
@@ -22,16 +23,31 @@ MAX_ATTEMPTS = 3
 
 class OfferTerm(BaseModel):
     issue_id: str
-    option_id: str
+    option_id: str | None = Field(
+        default=None, description="A listed option id, or null for custom terms"
+    )
+    custom_text: str | None = Field(
+        default=None, description="Your exact custom proposal, or null for a listed option"
+    )
 
 
 class CounterpartMove(BaseModel):
     message: str = Field(description="What you say to the other side, in character")
     offer: list[OfferTerm] = Field(
-        description="A formal proposal, one option per issue it covers; empty for none"
+        description="A proposal: each issue has either option_id or custom_text; empty for none"
     )
     accept: bool = Field(description="True only to accept the other side's latest offer as-is")
     walk_away: bool = Field(description="True to end the negotiation without a deal")
+
+    def as_offer(self) -> Offer | None:
+        if not self.offer:
+            return None
+        return Offer(
+            terms={t.issue_id: t.option_id for t in self.offer if t.option_id is not None},
+            custom_terms={
+                t.issue_id: t.custom_text for t in self.offer if t.custom_text is not None
+            },
+        )
 
 
 class CounterpartAgent:
@@ -75,7 +91,7 @@ negotiator. Stay in character. Do not coach the other side or comment on the exe
 # Case (public information both sides have)
 {self.case.public_brief}
 
-# Issues and options (use these ids in formal offers)
+# Issues and listed options (suggestions, not an exhaustive set of solutions)
 {issues}
 
 # Your role: {self.role.name} (confidential; the other side cannot see this)
@@ -91,8 +107,15 @@ accept or propose a complete deal worth less than that.
 
 # Each turn
 Say what you would say in a real conversation (a few sentences). Optionally attach a formal \
-offer naming one option per issue. Set accept to true only to accept the other side's latest \
-formal offer exactly as stated."""
+offer covering any subset of issues. For each issue, use either option_id for a listed \
+option or custom_text for a new solution, leaving the other field null. Engage with \
+custom proposals on their merits; don't reject them just because they are not listed or \
+silently replace them with a listed option. You may negotiate, counterpropose, or accept \
+custom terms based on your own role's interests, constraints, and walk-away alternative. \
+Custom terms have no defined point values: don't invent a score or claim a numeric \
+threshold was met. Known hard constraints still apply. Numeric minimums apply to fully \
+listed offers only. Set accept to true only to accept the other side's latest complete \
+formal offer exactly as stated, including all custom wording."""
 
     def _messages(self, session: Session) -> list[Message]:
         messages: list[Message] = []
@@ -114,7 +137,9 @@ formal offer exactly as stated."""
                     "role": "user",
                     "content": f"[Private note, unseen by the other side: at this stage only "
                     f"propose or accept complete deals worth at least "
-                    f"{self.minimum(session):.0f} points to you.]",
+                    f"{self.minimum(session):.0f} points to you when all terms are listed. "
+                    "For custom terms, assess your interests and constraints qualitatively; "
+                    "there is no point score.]",
                 }
             )
         return _merge_consecutive(messages)
@@ -122,14 +147,21 @@ formal offer exactly as stated."""
     def _problems(self, move: CounterpartMove, session: Session) -> list[str]:
         problems = []
         minimum = self.minimum(session)
-        terms = {}
+        seen = set()
         for term in move.offer:
+            if term.issue_id in seen:
+                problems.append(f"duplicate issue {term.issue_id!r}")
+            seen.add(term.issue_id)
+            if (term.option_id is None) == (term.custom_text is None):
+                problems.append("each issue needs either option_id or custom_text, not both")
+            if term.custom_text is not None and not term.custom_text.strip():
+                problems.append("custom terms cannot be blank")
             try:
-                if term.option_id not in self.case.issue(term.issue_id).option_ids():
+                issue = self.case.issue(term.issue_id)
+                if term.option_id is not None and term.option_id not in issue.option_ids():
                     problems.append(f"{term.option_id!r} is not an option for {term.issue_id!r}")
             except KeyError:
                 problems.append(f"{term.issue_id!r} is not an issue id")
-            terms[term.issue_id] = term.option_id
         if move.accept and move.walk_away:
             problems.append("you cannot both accept and walk away")
         if move.accept:
@@ -138,20 +170,23 @@ formal offer exactly as stated."""
                 problems.append("there is no complete offer from the other side to accept")
             else:
                 result = score_offer(self.case, self.role.id, theirs)
-                if not result.valid or result.surplus < 0:
+                if result.violations:
+                    problems.extend(result.violations)
+                elif result.surplus is not None and result.surplus < 0:
                     problems.append("their offer is worse for you than walking away")
-                elif result.points < minimum:
+                elif result.points is not None and result.points < minimum:
                     problems.append(
                         f"their offer is worth {result.points:g} to you; hold out for at "
                         f"least {minimum:.0f} at this stage"
                     )
-        if terms and not problems:
-            mine = Offer(terms=terms)
+        if move.offer and not problems:
+            mine = move.as_offer()
+            result = score_offer(self.case, self.role.id, mine)
+            problems.extend(result.violations)
             if mine.is_complete(self.case):
-                result = score_offer(self.case, self.role.id, mine)
-                if result.surplus < 0:
+                if result.surplus is not None and result.surplus < 0:
                     problems.append("that offer is worse for you than walking away")
-                elif result.points < minimum:
+                elif result.points is not None and result.points < minimum:
                     problems.append(
                         f"that offer is worth {result.points:g} to you; at this stage only "
                         f"offer deals worth at least {minimum:.0f}"
@@ -169,9 +204,7 @@ formal offer exactly as stated."""
                     index=len(session.turns),
                     speaker="counterpart",
                     text=move.message,
-                    offer=Offer(terms={t.issue_id: t.option_id for t in move.offer})
-                    if move.offer
-                    else None,
+                    offer=move.as_offer(),
                     accept=move.accept,
                     walk_away=move.walk_away,
                 )
@@ -202,7 +235,7 @@ formal offer exactly as stated."""
         return Turn(
             index=len(session.turns),
             speaker="counterpart",
-            text="Let me put something concrete on the table.",
+            text="Let me suggest an alternative using the listed options.",
             offer=offer,
         )
 
@@ -213,6 +246,10 @@ def _render_own(turn: Turn) -> str:
         offer=[
             OfferTerm(issue_id=k, option_id=v)
             for k, v in (turn.offer.terms if turn.offer else {}).items()
+        ]
+        + [
+            OfferTerm(issue_id=k, custom_text=v)
+            for k, v in (turn.offer.custom_terms if turn.offer else {}).items()
         ],
         accept=turn.accept,
         walk_away=turn.walk_away,
@@ -224,7 +261,12 @@ def _render_other(turn: Turn) -> str:
     parts = [turn.text]
     if turn.offer:
         parts.append(
-            "[Formal offer: " + ", ".join(f"{k}={v}" for k, v in turn.offer.terms.items()) + "]"
+            "[Formal offer: "
+            + ", ".join(
+                [f"{k}={v}" for k, v in turn.offer.terms.items()]
+                + [f"{k} (custom)={v}" for k, v in turn.offer.custom_terms.items()]
+            )
+            + "]"
         )
     if turn.accept:
         parts.append("[They accept your latest offer.]")

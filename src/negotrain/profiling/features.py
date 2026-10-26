@@ -59,7 +59,9 @@ def extract_features(session: Session, case: Case) -> Features:
         first_mine = mine[0][0] if mine else float("inf")
         first_theirs = theirs[0][0] if theirs else float("inf")
         f["anchored_first"] = 1.0 if first_mine < first_theirs else 0.0
-    if mine:
+    # Custom wording cannot be assigned a point claim or compared numerically with
+    # listed offers. Keep observable behavior without inventing concession scores.
+    if mine and not session.has_custom_terms:
         claims = [claim(case, me, o) for _, o in mine]
         f["first_offer_claim"] = claims[0]
         drops = [
@@ -96,7 +98,7 @@ def extract_features(session: Session, case: Case) -> Features:
             pts = score_offer(case, me, session.agreement).points
             f["efficiency"] = efficiency(case, session.agreement)
         f["points"] = pts
-        f["surplus_share"] = surplus_share(case, me, pts)
+        f["surplus_share"] = surplus_share(case, me, pts) if pts is not None else None
     return f
 
 
@@ -121,7 +123,7 @@ def flags(session: Session, case: Case, f: Features | None = None) -> list[str]:
         offer = session.latest_offer_from("counterpart")
         if offer is not None and offer.is_complete(case):
             result = score_offer(case, session.user_role_id, offer)
-            if result.valid and result.surplus > 0:
+            if result.valid and result.surplus is not None and result.surplus > 0:
                 out.append("impasse_with_zopa")
     if f["question_rate"] is not None and f["n_turns"] and f["n_turns"] >= 3:
         if f["question_rate"] == 0:

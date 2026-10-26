@@ -49,7 +49,7 @@ class ScriptedUser:
         theirs = session.latest_offer_from("counterpart")
         if theirs is not None and theirs.is_complete(self.case):
             result = score_offer(self.case, self.role.id, theirs)
-            if result.valid and result.points >= level:
+            if result.valid and result.points is not None and result.points >= level:
                 return Turn(index=index, speaker="user", text="Agreed.", accept=True)
         offer = closest_offer(self.case, self.role.id, level, theirs)
         if offer is None:
@@ -90,6 +90,6 @@ def episode_value(case: Case, session: Session) -> float:
         theirs = session.latest_offer_from("counterpart")
         if theirs is not None and theirs.is_complete(case):
             result = score_offer(case, role.id, theirs)
-            if result.valid:
+            if result.valid and result.points is not None:
                 return max(role.reservation_value, result.points)
     return role.reservation_value

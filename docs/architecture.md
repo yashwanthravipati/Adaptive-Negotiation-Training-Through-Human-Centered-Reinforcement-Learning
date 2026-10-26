@@ -11,15 +11,20 @@
    preset (domain randomization).
 3. **Negotiation.** The UI (`app/`, T-014) or the CLI (`cli.py`) appends `Turn`s to a
    `Session`. Each turn has free text plus an optional structured `Offer`
-   (issue → option), `accept`, or `walk_away`. `Session.add_turn` enforces turn order and
+   (`terms`: issue → listed option; `custom_terms`: issue → free text), `accept`, or
+   `walk_away`. `Session.add_turn` enforces turn order and
    the agreement rules: you can only accept the other side's latest *complete* offer.
 4. **Counterpart.** `CounterpartAgent.respond(session)` builds a system prompt from the
    public brief, its own role sheet, and behavior instructions (`profiles.describe`); it
    replays the transcript and asks the LLM for a structured `CounterpartMove`. Code-level
-   guards reject invalid ids, deals below the reservation value, and (T-011) deals below
-   the current aspiration level (`counterpart/aspiration.py`), and ask the model again; a
+   guards reject invalid ids and known hard-constraint violations. For fully listed
+   offers, they also reject deals below the reservation value or (T-011) the current
+   aspiration level (`counterpart/aspiration.py`), and ask the model again; a
    private per-turn note tells the model its current minimum. After three invalid
    attempts, code makes a counteroffer at the minimum (`agent.fallbacks` counts these).
+   Custom terms are evaluated qualitatively against the counterpart's own role; they
+   have no point score and no numeric reservation/aspiration guarantee. The counterpart
+   can propose or accept custom wording without mapping it to a listed option.
    `RuleBasedCounterpart` follows the same schedule with canned dialogue: it is the
    offline-mode opponent and the cheap finisher for rollouts.
 5. **Storage.** `SessionStore` writes `data/sessions/<id>.json` after every turn;
@@ -31,6 +36,9 @@
    (LLM counterpart for `horizon` turns, then the rule-based finisher) against a
    `simulation.ScriptedUser` that concedes at this user's observed pace; `build_report`
    turns the numbers into a coaching report (LLM, with a template fallback).
+   Sessions containing custom terms skip numeric simulations and concession features;
+   the coach still receives the full transcript. Custom agreements have null points,
+   surplus, and efficiency rather than fabricated scores.
    `profiling/` turns sessions into features, error flags, and skill scores shrunk toward
    0.5; `curriculum.next_scenario` uses them to pick the next tier and dial emphasis.
 7. **Real negotiations** are logged as `Session(kind="real")` with the agreement and the
@@ -47,7 +55,7 @@
 | `cases/__init__.py` | `load_case` | cases | v1 |
 | `cases/scoring.py` | `score_offer`, `joint_points`, `max_joint_offer`, `efficiency` | cases | v1 |
 | `cases/parser.py` | Raw case text or a set of files (`parse_documents`) → `Case`; infers a missing sheet | cases | MVP (T-004) |
-| `cases/documents.py` | Text from uploaded PDF / Word / text files | cases | MVP (T-045) |
+| `cases/documents.py` | Text from uploaded PDF / Word / text files and ZIP bundles; per-file warnings | cases | MVP (T-045) |
 | `prep.py` | Prep brief: `prep_numbers` (code), `build_prep` (LLM + template); own sheet only | app | MVP (T-045) |
 | `cases/offers.py` | Offer search: `closest_offer`, `best_joint_offer`, `claim`, `surplus_share` | cases | MVP |
 | `counterpart/profiles.py` | Tier presets, `sample_profile`, `describe` | counterpart | v1 (T-012) |
@@ -100,3 +108,20 @@ Tiers 1-5 are presets that run from transparent-cooperative to hardball (`profil
   consent).
 
 All new fields have defaults, so existing session and case JSON still loads.
+
+## Open-ended offers (decision 0006)
+
+- `Offer.custom_terms` defaults to `{}`; `terms` continues to hold listed option ids.
+  Each issue appears in at most one map. Either representation counts toward completion;
+  blank custom wording and unknown issue ids are rejected. Existing sessions still load.
+- `Offer.from_labels` preserves the builder's custom text, while exact listed labels
+  become option ids. Both the rehearsal and real-outcome forms accept new text.
+- `OfferTerm` in the counterpart response uses either `option_id` or `custom_text`.
+  Prompts and histories preserve custom wording for both speakers. Only the counterpart's
+  own confidential sheet enters its prompt.
+- `ScoreResult.points`/`surplus` and `OutcomeSummary.points`/`surplus` can be null.
+  `joint_points`, `efficiency`, and `claim` also return null for custom offers. Consumers
+  show "not scored" and exclude missing values from numeric skill estimates and comparisons.
+- `CounterfactualReport.skipped_reason` explains why numeric rollouts were not run.
+  Qualitative coaching remains available. The rule-based opponent cannot evaluate custom
+  terms and explicitly identifies its alternative as using listed options.

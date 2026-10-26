@@ -20,7 +20,7 @@ def user_concessions(case: Case, session: Session) -> int:
         if turn.speaker != "user" or turn.offer is None:
             continue
         current = claim(case, session.user_role_id, turn.offer)
-        if previous is not None and current < previous - 1e-9:
+        if previous is not None and current is not None and current < previous - 1e-9:
             count += 1
         previous = current
     return count

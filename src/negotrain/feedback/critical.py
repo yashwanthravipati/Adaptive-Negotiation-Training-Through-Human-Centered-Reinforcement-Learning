@@ -28,6 +28,8 @@ class CriticalTurn(BaseModel):
 
 
 def critical_turns(session: Session, case: Case, cap: int = 3) -> list[CriticalTurn]:
+    if session.has_custom_terms:
+        return []  # Numeric counterfactuals cannot value custom proposals.
     me = session.user_role_id
     found: list[CriticalTurn] = []
     previous_claim: float | None = None

@@ -109,23 +109,47 @@ class Case(BaseModel):
 
 
 class Offer(BaseModel):
-    """A proposal: issue_id -> option_id. May be partial (not every issue settled)."""
+    """A proposal with listed option ids and/or custom wording, keyed by issue id."""
 
-    terms: dict[str, str]
+    terms: dict[str, str] = Field(default_factory=dict)
+    custom_terms: dict[str, str] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def _check_custom_terms(self) -> Offer:
+        if self.terms.keys() & self.custom_terms.keys():
+            raise ValueError("an issue cannot have both a listed option and custom terms")
+        if any(not text.strip() for text in self.custom_terms.values()):
+            raise ValueError("custom terms cannot be blank")
+        return self
+
+    @classmethod
+    def from_labels(cls, case: Case, labels: dict[str, str | None]) -> Offer:
+        """Keep known labels scorable and preserve other proposals as custom wording."""
+        terms, custom = {}, {}
+        for issue in case.issues:
+            text = (labels.get(issue.id) or "").strip()
+            if not text:
+                continue
+            option = next((o for o in issue.options if o.label == text), None)
+            if option:
+                terms[issue.id] = option.id
+            else:
+                custom[issue.id] = text
+        return cls(terms=terms, custom_terms=custom)
 
     def is_complete(self, case: Case) -> bool:
-        return all(i.id in self.terms for i in case.issues)
+        return all(i.id in self.terms or i.id in self.custom_terms for i in case.issues)
+
+    def label(self, issue: Issue) -> str | None:
+        if issue.id in self.custom_terms:
+            return self.custom_terms[issue.id]
+        option_id = self.terms.get(issue.id)
+        return next((o.label for o in issue.options if o.id == option_id), option_id)
 
     def describe(self, case: Case) -> str:
-        parts = []
-        for issue in case.issues:
-            if issue.id in self.terms:
-                label = next(
-                    (o.label for o in issue.options if o.id == self.terms[issue.id]),
-                    self.terms[issue.id],
-                )
-                parts.append(f"{issue.name}: {label}")
-        return "; ".join(parts)
+        return "; ".join(
+            f"{issue.name}: {label}" for issue in case.issues if (label := self.label(issue))
+        )
 
 
 class Turn(BaseModel):
@@ -182,21 +206,33 @@ class Session(BaseModel):
                 return turn.offer
         return None
 
+    @property
+    def has_custom_terms(self) -> bool:
+        return bool(self.agreement and self.agreement.custom_terms) or any(
+            t.offer and t.offer.custom_terms for t in self.turns
+        )
+
     def add_turn(self, turn: Turn, case: Case) -> None:
         """Append a turn and update status/agreement. Accepting needs a complete offer."""
         if self.status != "active":
             raise ValueError(f"session is {self.status}")
         if turn.index != len(self.turns):
             raise ValueError(f"expected turn index {len(self.turns)}, got {turn.index}")
+        if turn.offer is not None:
+            issue_ids = {i.id for i in case.issues}
+            if (turn.offer.terms.keys() | turn.offer.custom_terms.keys()) - issue_ids:
+                raise ValueError("offer contains an unknown issue")
+        agreement = None
+        if turn.accept and not turn.walk_away:
+            other: Speaker = "counterpart" if turn.speaker == "user" else "user"
+            agreement = self.latest_offer_from(other)
+            if agreement is None or not agreement.is_complete(case):
+                raise ValueError("can only accept a complete offer from the other side")
         self.turns.append(turn)
         if turn.walk_away:
             self.status = "impasse"
         elif turn.accept:
-            other: Speaker = "counterpart" if turn.speaker == "user" else "user"
-            offer = self.latest_offer_from(other)
-            if offer is None or not offer.is_complete(case):
-                raise ValueError("can only accept a complete offer from the other side")
-            self.agreement = offer
+            self.agreement = agreement
             self.status = "agreed"
 
 

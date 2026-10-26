@@ -43,7 +43,11 @@ handy for demos and UI work.
 The app runs locally for one person (no sign-in). Typical flow for a class simulation:
 
 1. **Upload your case** (the first screen; nothing else is unlocked until this is done):
-   drop in all your case files (PDF, Word, text). Claude works out which file is which and
+   drop in all your case files (PDF, Word, text), individually or in a ZIP bundle.
+   ZIPs can contain folders; supported documents are read with their paths preserved.
+   Hidden/macOS metadata is ignored, and unreadable or unsupported files are reported.
+   ZIPs are limited to 200 entries and 50 MB of uncompressed documents; password-protected
+   files and ZIPs inside ZIPs aren't supported. Claude works out which file is which and
    builds a scorable scenario, estimating the other side's instructions if you don't have
    them (saved to `data/cases/private/`, gitignored). Pick your role and start training.
    Offline, or to reuse a case, pick a saved case instead.
@@ -52,14 +56,22 @@ The app runs locally for one person (no sign-in). Typical flow for a class simul
    pitfalls, checklist) and a training plan: warm-up, realistic, tough, and
    profile-recommended counterparts on this exact scenario.
 3. **Rehearse**: chat, attach formal offers with the per-issue builder, accept, or walk
-   away. No hints during the negotiation.
+   away. For each issue, choose a suggestion or type your own solution and press Enter;
+   leave undecided issues blank. The AI counterpart can discuss, counterpropose, or accept
+   custom terms. They are saved exactly as proposed. No hints during the negotiation.
 4. **Feedback**: after each session: outcome vs walk-away and vs the best joint deal, a
    coaching report, and "moments that mattered" from counterfactual rollouts. Both sheets
    are revealed.
 5. **My profile**: skill scores with confidence, recurring error patterns, and the
    recommended next rehearsal.
-6. **Real negotiation**: after the real simulation, log the outcome and how the other side
-   behaved, compared with your rehearsals (sim-to-real gap).
+6. **Real negotiation**: after the real simulation, log the outcome (including custom
+   agreed terms) and how the other side behaved, compared with your rehearsals (sim-to-real gap).
+
+Custom terms have no defined point value in the case's score tables. These agreements
+are marked **not scored**; coaching remains qualitative, and sessions involving custom
+terms skip point-based counterfactual simulations and concession metrics. Missing values
+are excluded from numeric comparisons and skill estimates. The offline counterpart can
+only evaluate listed options; use the AI counterpart for open-ended negotiation.
 
 "New scenario" in the sidebar goes back to step 1.
 

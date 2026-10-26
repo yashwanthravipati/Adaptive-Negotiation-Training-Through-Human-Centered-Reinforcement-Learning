@@ -74,7 +74,7 @@ class RuleBasedCounterpart:
         last = session.turns[-1] if session.turns else None
         if theirs is not None and theirs.is_complete(self.case) and last and last.offer:
             result = score_offer(self.case, self.role.id, theirs)
-            if result.valid and result.points >= minimum:
+            if result.valid and result.points is not None and result.points >= minimum:
                 return Turn(index=index, speaker="counterpart", text=_ACCEPT, accept=True)
 
         tone = _tone(self.profile)
@@ -93,6 +93,11 @@ class RuleBasedCounterpart:
             text = _HOLD[tone]
         else:
             text = _COUNTER[tone]
+        if theirs is not None and theirs.custom_terms:
+            text = (
+                "I can only evaluate the listed options in offline mode. "
+                "Here is a proposal using those options."
+            )
         if last and last.speaker == "user" and "?" in last.text:
             if self.profile.disclosure >= 0.5:
                 text += self._priority_hint()

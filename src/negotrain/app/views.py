@@ -25,7 +25,7 @@ from negotrain import config
 from negotrain.app import style
 from negotrain.app.style import md
 from negotrain.cases import case_library, save_private_case
-from negotrain.cases.documents import SUPPORTED, UnreadableDocument, extract_text
+from negotrain.cases.documents import UPLOAD_TYPES, extract_documents
 from negotrain.cases.offers import surplus_share
 from negotrain.cases.parser import parse_case, parse_documents
 from negotrain.cases.scoring import score_offer
@@ -171,23 +171,22 @@ def render_sheet(case: Case, role_id: str, *, title: str) -> None:
 
 def offer_html(case: Case, offer: Offer, role_id: str, title: str = "Formal offer") -> str:
     result = score_offer(case, role_id, offer)
-    terms = [(i.name, label) for i in case.issues if (label := _label(i, offer))]
-    badge = f"{result.points:g} pts to you"
+    terms = [(i.name, label) for i in case.issues if (label := offer.label(i))]
+    badge = (
+        "Custom terms · not scored" if result.points is None else f"{result.points:g} pts to you"
+    )
     if not offer.is_complete(case):
         badge += " · partial"
     return style.offer_card(title, terms, badge)
 
 
-def _label(issue, offer: Offer) -> str | None:
-    option_id = offer.terms.get(issue.id)
-    if option_id is None:
-        return None
-    return next((o.label for o in issue.options if o.id == option_id), option_id)
-
-
 def describe_offer(case: Case, offer: Offer, role_id: str) -> str:
     result = score_offer(case, role_id, offer)
-    worth = f"worth **{result.points:g}** to you"
+    worth = (
+        "custom terms, not scored"
+        if result.points is None
+        else f"worth **{result.points:g}** to you"
+    )
     if not offer.is_complete(case):
         worth += " on the issues it covers (partial offer)"
     return f"{offer.describe(case)} — {worth}"
@@ -222,15 +221,21 @@ def outcome_metrics(session: Session, case: Case) -> None:
             ),
             (
                 "Your points",
-                f"{o.points:g}",
-                f"{o.surplus:+g} vs walk-away",
-                "green" if o.surplus > 0 else "red" if o.surplus < 0 else "gray",
+                "Not scored" if o.points is None else f"{o.points:g}",
+                "Custom terms" if o.surplus is None else f"{o.surplus:+g} vs walk-away",
+                "gray"
+                if o.surplus is None
+                else "green"
+                if o.surplus > 0
+                else "red"
+                if o.surplus < 0
+                else "gray",
             ),
-            ("Best possible for you", f"{o.best_possible:g}", "", ""),
+            ("Best listed outcome for you", f"{o.best_possible:g}", "", ""),
             (
                 "Joint efficiency",
                 f"{o.efficiency:.0%}" if o.efficiency is not None else "—",
-                "of the best joint deal",
+                "among listed options",
                 "gray",
             ),
         ]
@@ -319,9 +324,10 @@ def page_setup() -> None:
             _api_key_input()
         files = st.file_uploader(
             "Case materials",
-            type=list(SUPPORTED),
+            type=list(UPLOAD_TYPES),
             accept_multiple_files=True,
-            help="PDF, Word, or text. Scanned PDFs without a text layer can't be read.",
+            help="PDF, Word, text, or a ZIP containing these files. "
+            "Scanned PDFs without a text layer can't be read.",
         )
         infer = st.checkbox(
             "If the other side's instructions aren't included, estimate them", value=True
@@ -410,12 +416,9 @@ def page_prepare() -> None:
 
 
 def _build_scenario(p: Participant, files: list, infer: bool) -> None:
-    documents = {}
-    for f in files:
-        try:
-            documents[f.name] = extract_text(f.name, f.getvalue())
-        except UnreadableDocument as e:
-            st.warning(str(e))
+    documents, warnings = extract_documents((f.name, f.getvalue()) for f in files)
+    for warning in warnings:
+        st.warning(warning)
     if not documents:
         st.error("None of the files had readable text.")
         return
@@ -624,6 +627,15 @@ def _move_controls(session: Session, case: Case) -> None:
     with st.form("move", clear_on_submit=True):
         text = st.text_area("Your message", placeholder="Say what you'd say across the table…")
         attach = st.checkbox("Attach a formal offer")
+        st.caption(
+            "Choose a suggestion or type your own solution and press Enter. "
+            "Leave undecided issues blank."
+        )
+        if not online():
+            st.caption(
+                "The offline counterpart only evaluates listed options. "
+                "Use the AI counterpart to negotiate custom solutions."
+            )
         cols = st.columns(min(2, len(case.issues)))
         picks = {}
         for n, issue in enumerate(case.issues):
@@ -631,16 +643,15 @@ def _move_controls(session: Session, case: Case) -> None:
                 issue.name,
                 [o.label for o in issue.options],
                 index=None,
-                placeholder="Leave open",
+                placeholder="Choose or type a solution",
+                accept_new_options=True,
+                help="Suggestions are optional. Type any proposal for this issue and press Enter.",
                 key=f"o_{issue.id}",
             )
         if st.form_submit_button("Send", type="primary"):
-            terms = {}
-            for issue in case.issues:
-                label = picks[issue.id]
-                if label is not None:
-                    terms[issue.id] = next(o.id for o in issue.options if o.label == label)
-            offer = Offer(terms=terms) if attach and terms else None
+            offer = Offer.from_labels(case, picks) if attach else None
+            if offer is not None and not (offer.terms or offer.custom_terms):
+                offer = None
             if not text.strip() and offer is None:
                 st.error("Write a message or attach an offer.")
             else:
@@ -816,26 +827,38 @@ def page_feedback() -> None:
     outcome_metrics(session, case)
 
     debrief = store.load_artifact(session.id, "feedback", Debrief)
-    with st.expander("Feedback settings", expanded=debrief is None):
-        sim_choice = st.radio(
-            "Simulate alternatives against",
-            ["Same AI counterpart (slower, uses API)", "Fast rule-based simulator (free)"],
-            index=0 if online() else 1,
-            disabled=not online(),
+    if session.has_custom_terms:
+        use_llm, cap, k, n, horizon = False, 3, 2, 1, 4
+        st.caption(
+            "Custom proposals receive qualitative coaching. Point-based simulations "
+            "are unavailable because these terms have no defined point values."
         )
-        use_llm = online() and sim_choice.startswith("Same")
-        c = st.columns(4)
-        cap = c[0].number_input("Moments to analyze", 1, 5, 3)
-        k = c[1].number_input("Alternatives each", 1, 4, 2)
-        n = c[2].number_input("Rollouts each", 1, 6, 2 if use_llm else 1)
-        horizon = c[3].number_input("AI turns per rollout", 2, 10, 4)
-        if use_llm:
-            calls = estimate_calls(int(cap), int(k), int(n), int(horizon)) + 1
-            st.caption(
-                f"Up to ~{calls} API calls (≈ ${calls * EST_COST_PER_CALL:.2f}), typically 1–3 min."
+    else:
+        with st.expander("Feedback settings", expanded=debrief is None):
+            sim_choice = st.radio(
+                "Simulate alternatives against",
+                ["Same AI counterpart (slower, uses API)", "Fast rule-based simulator (free)"],
+                index=0 if online() else 1,
+                disabled=not online(),
             )
+            use_llm = online() and sim_choice.startswith("Same")
+            c = st.columns(4)
+            cap = c[0].number_input("Moments to analyze", 1, 5, 3)
+            k = c[1].number_input("Alternatives each", 1, 4, 2)
+            n = c[2].number_input("Rollouts each", 1, 6, 2 if use_llm else 1)
+            horizon = c[3].number_input("AI turns per rollout", 2, 10, 4)
+            if use_llm:
+                calls = estimate_calls(int(cap), int(k), int(n), int(horizon)) + 1
+                st.caption(
+                    f"Up to ~{calls} API calls (≈ ${calls * EST_COST_PER_CALL:.2f}), "
+                    "typically 1–3 min."
+                )
     if st.button("Generate feedback" if debrief is None else "Regenerate feedback", type="primary"):
-        with st.spinner("Simulating alternatives and writing your debrief…"):
+        with st.spinner(
+            "Writing your debrief…"
+            if session.has_custom_terms
+            else "Simulating alternatives and writing your debrief…"
+        ):
             calls_before = _total_calls()
             cost_before = _total_cost()
             counterfactuals = analyze_session(
@@ -885,7 +908,10 @@ def page_feedback() -> None:
         with b:
             render_sheet(case, session.counterpart_role_id, title="Their role")
         o = outcome_summary(session, case)
-        st.caption(f"Best joint deal: {md(o.max_joint_deal)} ({o.max_joint:g} joint points).")
+        st.caption(
+            f"Best joint deal among listed options: {md(o.max_joint_deal)} "
+            f"({o.max_joint:g} joint points)."
+        )
     with tabs[4]:
         f = extract_features(session, case)
         st.dataframe([{"feature": k, "value": v} for k, v in f.items()], hide_index=True)
@@ -941,6 +967,9 @@ def _render_report(report: CoachingReport) -> None:
 def _render_counterfactuals(
     report: CounterfactualReport | None, session: Session, case: Case
 ) -> None:
+    if report is not None and report.skipped_reason:
+        st.info(report.skipped_reason)
+        return
     if report is None or not report.estimates:
         st.info("No offers, acceptances, or walk-aways to analyze in this session.")
         return
@@ -1074,11 +1103,15 @@ def page_real() -> None:
             format_func=lambda s: "Deal" if s == "agreed" else "No deal",
         )
         st.markdown("Agreed terms (if there was a deal):")
+        st.caption("Choose a suggestion or type the terms you agreed to and press Enter.")
         picks = {}
         cols = st.columns(min(3, len(case.issues)))
         for n, issue in enumerate(case.issues):
             picks[issue.id] = cols[n % len(cols)].selectbox(
-                issue.name, [o.label for o in issue.options], key=f"real_{issue.id}"
+                issue.name,
+                [o.label for o in issue.options],
+                key=f"real_{issue.id}",
+                accept_new_options=True,
             )
         st.markdown("How did the other side behave? (0 = not at all, 1 = very)")
         observed = {
@@ -1088,12 +1121,10 @@ def page_real() -> None:
         if st.form_submit_button("Save real outcome", type="primary"):
             agreement = None
             if status == "agreed":
-                agreement = Offer(
-                    terms={
-                        i.id: next(o.id for o in i.options if o.label == picks[i.id])
-                        for i in case.issues
-                    }
-                )
+                agreement = Offer.from_labels(case, picks)
+                if not agreement.is_complete(case):
+                    st.error("Enter the agreed terms for every issue before saving a deal.")
+                    return
             SessionStore().save(
                 Session(
                     participant_id=p.id,
@@ -1139,13 +1170,20 @@ def _sim2real(p: Participant, case: Case, role_id: str) -> None:
     if not rehearsals:
         st.caption("No rehearsals of this case and role yet to compare against.")
         return
-    mean_pts = sum(r["Your points"] for r in rows[:-1]) / len(rehearsals)
-    share = surplus_share(case, role_id, real_pts) - surplus_share(case, role_id, mean_pts)
-    st.metric(
-        "Real outcome vs rehearsal average",
-        f"{real_pts:g} pts",
-        f"{real_pts - mean_pts:+.0f} pts ({share:+.0%} of your range)",
-    )
+    scored = [r["Your points"] for r in rows[:-1] if r["Your points"] is not None]
+    if real_pts is not None and scored:
+        mean_pts = sum(scored) / len(scored)
+        share = surplus_share(case, role_id, real_pts) - surplus_share(case, role_id, mean_pts)
+        st.metric(
+            "Real outcome vs scored rehearsal average",
+            f"{real_pts:g} pts",
+            f"{real_pts - mean_pts:+.0f} pts ({share:+.0%} of your range)",
+        )
+    if real_pts is None or len(scored) != len(rehearsals):
+        st.caption(
+            "Agreements with custom terms have no point score "
+            "and are excluded from numeric comparisons."
+        )
     profiles: list[CounterpartProfile] = [
         s.counterpart_profile for s in rehearsals if s.counterpart_profile
     ]

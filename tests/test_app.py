@@ -136,11 +136,13 @@ def test_prepare_writes_brief_and_training_plan_starts_rehearsals(scenario):
     assert session.case_id == case.id and session.counterpart_profile.tier == 2
 
 
-def test_upload_builds_a_scenario(tmp_path, monkeypatch):
+@pytest.mark.parametrize("bundled", [False, True], ids=["loose", "zip"])
+def test_upload_builds_a_scenario(tmp_path, monkeypatch, bundled):
     import shutil
 
     from negotrain.app import views
     from negotrain.llm import ScriptedLLM
+    from test_documents import make_zip
     from test_parser import parsed_from
 
     cases = tmp_path / "cases"
@@ -156,18 +158,31 @@ def test_upload_builds_a_scenario(tmp_path, monkeypatch):
     monkeypatch.setattr(views, "_total_cost", lambda: 0.0)
 
     at = page("page_setup")
-    at.file_uploader[0].set_value(
-        [
-            ("general.txt", b"Public info about the hiring.", "text/plain"),
-            ("candidate.md", b"My confidential sheet.", "text/markdown"),
-            ("scan.pdf", b"not really a pdf", "application/pdf"),
+    files = [
+        ("general.txt", b"Public info about the hiring.", "text/plain"),
+        ("candidate.md", b"My confidential sheet.", "text/markdown"),
+        ("scan.pdf", b"not really a pdf", "application/pdf"),
+    ]
+    if bundled:
+        files = [
+            (
+                "case.zip",
+                make_zip([(f"case/{name}", data) for name, data, _ in files]),
+                "application/zip",
+            ),
+            ("notes.txt", b"Extra instructions.", "text/plain"),
         ]
-    )
+    at.file_uploader[0].set_value(files)
     at.run()
     button(at, "Build scenario").click().run()
     assert not at.exception
     assert (cases / "private" / "uploaded_case.json").exists()
     assert "general.txt" in scripted.calls[0][1][0]["content"]
+    if bundled:
+        prompt = scripted.calls[0][1][0]["content"]
+        assert "case.zip/case/general.txt" in prompt
+        assert "case.zip/case/candidate.md" in prompt
+        assert "My confidential sheet." in prompt and "Extra instructions." in prompt
     assert any("scan.pdf" in str(w.value) for w in at.warning)  # unreadable file reported
     assert at.session_state["setup_case_id"] == "uploaded_case"
     # The uploaded sheet's role is preselected; the other side is marked as estimated.
@@ -180,3 +195,67 @@ def test_dollar_amounts_are_escaped_for_markdown():
     from negotrain.app.style import md
 
     assert md("$120,000 or $150,000") == "\\$120,000 or \\$150,000"
+
+
+def submit_custom_terms(at, submit_label, values):
+    """Send the browser's free-text widget payload; AppTest.select only supports old options."""
+    button(at, submit_label).click()
+    state = at._tree.get_widget_states()
+    by_id = {w.id: w for w in state.widgets}
+    for key, value in values.items():
+        widget = at.selectbox(key=key)
+        assert widget.proto.accept_new_options
+        by_id[widget.id].string_value = value
+    return at._run(state)
+
+
+def test_custom_offer_can_be_sent_accepted_and_reviewed(scenario, monkeypatch):
+    from negotrain.app import views
+    from negotrain.counterpart import CounterpartAgent
+    from negotrain.llm import ScriptedLLM
+    from test_counterpart import move
+    from test_custom_offers import CUSTOM
+
+    scripted = ScriptedLLM([move(accept=True)])
+    monkeypatch.setattr(
+        views,
+        "make_counterpart",
+        lambda session, case: CounterpartAgent(
+            case, session.counterpart_role_id, session.counterpart_profile, scripted
+        ),
+    )
+    at = page("page_rehearse")
+    button(at, "Start rehearsal").click().run()
+    at.text_area[0].input("Could this arrangement work?")
+    next(c for c in at.checkbox if c.label == "Attach a formal offer").check()
+    for key, label in {
+        "salary": "$140,000",
+        "bonus": "None",
+        "start": "In 4 weeks",
+        "vacation": "20 days",
+    }.items():
+        at.selectbox(key=f"o_{key}").select(label)
+    submit_custom_terms(at, "Send", {"o_remote": CUSTOM})
+    assert not at.exception
+    session = at.session_state["session"]
+    assert session.status == "agreed" and session.agreement.custom_terms == {"remote": CUSTOM}
+    assert SessionStore().load(session.id).agreement == session.agreement
+    assert CUSTOM in views.offer_html(load_case(CASE), session.agreement, "candidate")
+
+    feedback = page("page_feedback")
+    assert not feedback.exception
+    button(feedback, "Generate feedback").click().run()
+    assert not feedback.exception
+    assert "no defined point score" in visible_text(feedback)
+    assert not page("page_profile").exception
+
+
+def test_real_negotiation_saves_custom_terms_without_numeric_comparison(scenario):
+    from test_custom_offers import CUSTOM
+
+    at = page("page_real")
+    submit_custom_terms(at, "Save real outcome", {"real_remote": CUSTOM})
+    assert not at.exception
+    saved = next(s for s in SessionStore().all() if s.kind == "real")
+    assert saved.agreement.custom_terms == {"remote": CUSTOM}
+    assert "Rehearsal vs real" in " ".join(str(h.value) for h in at.subheader)

@@ -89,15 +89,23 @@ def play(case: Case, role_id: str, tier: int, seed: int | None, participant: str
         print(f"\n{counterpart_role.name}> {reply.text}")
         if reply.offer:
             mine = score_offer(case, role_id, reply.offer)
-            print(f"  [offer: {reply.offer.describe(case)}]  (worth {mine.points:g} to you)")
+            value = (
+                "custom terms, not scored"
+                if mine.points is None
+                else f"worth {mine.points:g} to you"
+            )
+            print(f"  [offer: {reply.offer.describe(case)}]  ({value})")
         print()
 
     print(f"Session {session.id}: {session.status}")
     if session.agreement:
         mine = score_offer(case, role_id, session.agreement)
         print(f"Deal: {session.agreement.describe(case)}")
-        print(f"Your points: {mine.points:g} (surplus {mine.surplus:+g} over walking away)")
-        print(f"Efficiency: {efficiency(case, session.agreement):.0%} of max joint points")
+        if mine.points is None:
+            print("Custom terms: no defined point score or numeric efficiency.")
+        else:
+            print(f"Your points: {mine.points:g} (surplus {mine.surplus:+g} over walking away)")
+            print(f"Efficiency: {efficiency(case, session.agreement):.0%} of max joint points")
     print(f"Saved to {store.root / (session.id + '.json')}")
 
 

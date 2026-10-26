@@ -91,6 +91,7 @@ class CounterfactualReport(BaseModel):
     horizon: int
     estimates: list[TurnEstimate]
     seconds: float
+    skipped_reason: str | None = None
 
 
 def estimate_calls(n_turns: int, k: int, n: int, horizon: int) -> int:
@@ -116,6 +117,8 @@ def alternatives(session: Session, case: Case, turn_index: int, k: int = 3) -> l
     advice. "Trade across issues" uses both sheets: it is hindsight, shown only after the
     session when the other sheet is revealed anyway.
     """
+    if session.has_custom_terms:
+        return []
     me = session.user_role_id
     turn = session.turns[turn_index]
     prefix = session.turns[:turn_index]
@@ -142,7 +145,8 @@ def alternatives(session: Session, case: Case, turn_index: int, k: int = 3) -> l
 
     if turn.walk_away:
         if theirs is not None and theirs.is_complete(case):
-            if score_offer(case, me, theirs).surplus >= 0:
+            surplus = score_offer(case, me, theirs).surplus
+            if surplus is not None and surplus >= 0:
                 add("Accept their last offer", "Okay, we have a deal.", None, accept=True)
         add(
             "Make a final offer instead",
@@ -208,6 +212,8 @@ def rollout(
     step: float,
 ) -> tuple[float, bool]:
     """Play ``action`` at ``turn_index`` and continue; returns (user points, agreed)."""
+    if session.has_custom_terms or (action.offer is not None and action.offer.custom_terms):
+        raise ValueError("numeric rollouts cannot value custom terms")
     fork = _fork(session, case, turn_index)
     fork.add_turn(
         Turn(
@@ -300,6 +306,17 @@ def analyze_session(
     horizon: int = 4,
     max_workers: int = 8,
 ) -> CounterfactualReport:
+    if session.has_custom_terms:
+        return CounterfactualReport(
+            session_id=session.id,
+            opponent=opponent,
+            n_rollouts=0,
+            horizon=horizon,
+            estimates=[],
+            seconds=0.0,
+            skipped_reason="Point-based simulations are unavailable for custom terms. "
+            "Your full proposals are included in the qualitative coaching report.",
+        )
     start = time.monotonic()
     turns = critical_turns(session, case, cap=cap)
     with ThreadPoolExecutor(max_workers=max_workers) as pool:

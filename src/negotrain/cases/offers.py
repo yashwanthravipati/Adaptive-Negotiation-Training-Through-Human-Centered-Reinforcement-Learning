@@ -23,7 +23,10 @@ def space_size(case: Case) -> int:
 
 
 def points(case: Case, role_id: str, offer: Offer) -> float:
-    return score_offer(case, role_id, offer).points
+    result = score_offer(case, role_id, offer)
+    if result.points is None:
+        raise ValueError("custom terms do not have defined point values")
+    return result.points
 
 
 def best_offer_for(case: Case, role_id: str) -> Offer:
@@ -35,11 +38,13 @@ def best_points(case: Case, role_id: str) -> float:
     return points(case, role_id, best_offer_for(case, role_id))
 
 
-def claim(case: Case, role_id: str, offer: Offer) -> float:
+def claim(case: Case, role_id: str, offer: Offer) -> float | None:
     """Share of the role's maximum on the issues the offer settles, in [0, 1].
 
     Comparable across partial and complete offers, which is what concession tracking needs.
     """
+    if offer.custom_terms:
+        return None
     role = case.role(role_id)
     got = top = low = 0.0
     for issue_id, option_id in offer.terms.items():
@@ -61,6 +66,8 @@ def surplus_share(case: Case, role_id: str, pts: float) -> float:
 
 def complete_with(case: Case, offer: Offer | None, fill: Offer) -> Offer:
     """``offer`` with unsettled issues taken from ``fill``."""
+    if fill.custom_terms or (offer is not None and offer.custom_terms):
+        raise ValueError("cannot substitute listed options for custom terms")
     terms = dict(fill.terms)
     if offer:
         terms.update({k: v for k, v in offer.terms.items() if k in terms})
@@ -106,6 +113,9 @@ def closest_offer(
     Returns None if no offer reaches ``min_points``. Valid offers only (no hard-constraint
     violations for this role).
     """
+    # This search can only suggest listed options; it never values the custom wording.
+    if target is not None and target.custom_terms:
+        target = Offer(terms=target.terms)
     if space_size(case) <= MAX_ENUMERATE:
         evaluate = _evaluator(case, role_id)
         wanted = [target.terms.get(i.id) if target else None for i in case.issues]

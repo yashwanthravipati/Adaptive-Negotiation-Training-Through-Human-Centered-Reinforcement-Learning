@@ -37,10 +37,10 @@ class CoachingReport(BaseModel):
 
 class OutcomeSummary(BaseModel):
     status: str
-    points: float
+    points: float | None
     reservation_value: float
     best_possible: float
-    surplus: float
+    surplus: float | None
     efficiency: float | None
     their_points: float | None
     max_joint: float
@@ -60,7 +60,7 @@ def outcome_summary(session: Session, case: Case) -> OutcomeSummary:
         points=pts,
         reservation_value=me.reservation_value,
         best_possible=best_points(case, me.id),
-        surplus=pts - me.reservation_value,
+        surplus=None if pts is None else pts - me.reservation_value,
         efficiency=eff,
         their_points=theirs,
         max_joint=joint_points(case, best_joint),
@@ -78,7 +78,12 @@ def transcript(session: Session, case: Case) -> str:
         if t.offer:
             u = score_offer(case, me, t.offer).points
             c = score_offer(case, them, t.offer).points
-            line += f"\n    offer: {t.offer.describe(case)} (user {u:g} / counterpart {c:g} pts)"
+            scores = (
+                "unscored: custom terms have no defined point values"
+                if u is None or c is None
+                else f"user {u:g} / counterpart {c:g} pts"
+            )
+            line += f"\n    offer: {t.offer.describe(case)} ({scores})"
         if t.accept:
             line += "\n    [accepts]"
         if t.walk_away:
@@ -88,6 +93,8 @@ def transcript(session: Session, case: Case) -> str:
 
 
 def _counterfactual_lines(report: CounterfactualReport | None) -> str:
+    if report is not None and report.skipped_reason:
+        return report.skipped_reason
     if report is None or not report.estimates:
         return "(no counterfactual analysis was run)"
     lines = []
@@ -114,7 +121,11 @@ the counterfactual simulation shows a large gap between what the student did and
 alternative. Treat simulation estimates as rough evidence from a few rollouts, not as \
 certainty. "What to try" should be a transferable principle (for example, "make each \
 concession smaller than the last and ask for something in return"), not a script for this \
-exact case. Write in second person, plainly, without hype."""
+exact case. Custom terms are legitimate proposals but have no defined points. For these, \
+discuss creativity, interests, feasibility, and tradeoffs qualitatively; never invent \
+points, claim that a numeric walk-away was met, or treat missing metrics as zero. \
+The best listed deal is only a benchmark within the predefined options, not a bound on \
+custom solutions. Write in second person, plainly, without hype."""
 
 
 def _prompt(
@@ -176,7 +187,11 @@ def template_report(
     flag_keys: list[str],
     report: CounterfactualReport | None,
 ) -> CoachingReport:
-    if session.status == "agreed":
+    if session.status == "agreed" and outcome.points is None:
+        headline = (
+            "You reached a deal with custom terms. This agreement has no defined point score."
+        )
+    elif session.status == "agreed":
         headline = (
             f"You reached a deal worth {outcome.points:g} points "
             f"({outcome.surplus:+g} vs walking away)"
@@ -191,19 +206,33 @@ def template_report(
     else:
         headline = "The negotiation did not finish."
     strengths = []
-    if "weak_anchor" not in flag_keys and session.latest_offer_from("user"):
+    if (
+        not session.has_custom_terms
+        and "weak_anchor" not in flag_keys
+        and session.latest_offer_from("user")
+    ):
         strengths.append("You opened ambitiously, which set a favorable range.")
-    if "early_concession" not in flag_keys and "big_concessions" not in flag_keys:
+    if (
+        not session.has_custom_terms
+        and "early_concession" not in flag_keys
+        and "big_concessions" not in flag_keys
+    ):
         strengths.append("You conceded with discipline rather than in big unreciprocated jumps.")
     if "no_questions" not in flag_keys and any(
         "?" in t.text for t in session.turns if t.speaker == "user"
     ):
         strengths.append("You asked questions to learn about the other side.")
-    if session.status == "agreed" and outcome.surplus > 0:
+    if session.status == "agreed" and outcome.surplus is not None and outcome.surplus > 0:
         strengths.append("You closed a deal better than your walk-away value.")
     improvements = [FLAG_DESCRIPTIONS[k] + "." for k in flag_keys] or [
         "Keep practicing against tougher counterparts to test these habits under pressure."
     ]
+    if session.has_custom_terms:
+        improvements.insert(
+            0,
+            "Review whether your custom terms are specific, feasible, "
+            "and address both sides' interests.",
+        )
     moments = []
     if report:
         ranked = sorted(

@@ -25,7 +25,7 @@ def _clip(x: float) -> float:
 
 
 def _concession_discipline(f: Features) -> float | None:
-    if not f["n_offers"]:
+    if not f["n_offers"] or f["mean_concession"] is None:
         return None
     early = f["early_concession"] or 0.0
     step = f["mean_concession"] or 0.0

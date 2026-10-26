@@ -64,7 +64,9 @@ def _strong(session: Session, case: Case) -> bool:
 
 def _weak(session: Session, case: Case) -> bool:
     f = extract_features(session, case)
-    return session.status == "impasse" or (f["surplus_share"] or 0) < 0.1
+    return session.status == "impasse" or (
+        f["surplus_share"] is not None and f["surplus_share"] < 0.1
+    )
 
 
 def next_scenario(

@@ -102,8 +102,9 @@ tests/              pytest; `case` fixture loads data/cases/cloudline_hiring.jso
 - **Information hiding:** the counterpart never sees the user's confidential sheet, and the
   user never sees the counterpart's sheet before the debrief. Test this when you touch
   prompts or the UI.
-- **Economics are enforced in code**, not trusted to the prompt: reservation values now,
-  the aspiration schedule after T-011 (decision 0003).
+- **Listed-offer economics are enforced in code**: reservation values and the aspiration
+  schedule (decision 0003). User-requested custom terms are qualitative and unscored
+  (decision 0006); never invent points or claim numeric guarantees for those agreements.
 - **Data (decision 0004):** never commit `.env`, `data/cases/private/`, `data/sessions/`,
   `data/study/`, or participant information. Commit only synthetic cases. If you're
   asked to add a case from class materials, put it in `data/cases/private/`.
