@@ -1,10 +1,10 @@
 ---
 id: T-020
 title: Critical-turn detection
-status: todo
+status: in-progress
 milestone: M2
 workstream: feedback
-owner: unassigned
+owner: mahdi
 depends_on: []
 ---
 
@@ -15,8 +15,9 @@ Find the user turns worth counterfactual analysis.
 Candidates: first offers, concessions (own score drops from the previous offer), information disclosures (LLM-tagged), accept and walk-away decisions, responses to an anchor.
 
 ## Acceptance criteria
-- [ ] critical_turns(session, case) -> list of (turn_index, kind)
+- [x] critical_turns(session, case) -> list of (turn_index, kind)
 - [ ] Rules for offers and concessions; LLM tagging for disclosures
-- [ ] Unit tests on synthetic transcripts; cap per session
+- [x] Unit tests on synthetic transcripts; cap per session
 
 ## Log
+- 2026-10-25: MVP branch: feedback/critical.py, rule-based kinds with priority cap. No LLM disclosure tagging yet.

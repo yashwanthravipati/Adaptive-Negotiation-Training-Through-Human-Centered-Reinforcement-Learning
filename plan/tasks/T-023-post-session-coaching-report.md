@@ -1,10 +1,10 @@
 ---
 id: T-023
 title: Post-session coaching report
-status: todo
+status: in-progress
 milestone: M2
 workstream: feedback
-owner: unassigned
+owner: mahdi
 depends_on: [T-021]
 ---
 
@@ -16,6 +16,7 @@ Decision 0002: feedback after the session only, no live move recommendations.
 
 ## Acceptance criteria
 - [ ] Report shown on the UI end screen within about 5 minutes
-- [ ] Participants rate usefulness (1-5)
+- [x] Participants rate usefulness (1-5)
 
 ## Log
+- 2026-10-25: MVP branch: coaching.py, LLM report from code numbers + template fallback; usefulness rating stored. Live latency not measured.

@@ -1,0 +1,292 @@
+"""Post-session coaching report (T-023).
+
+All numbers come from code (scoring, features, counterfactual rollouts); the LLM only turns
+them into teaching. Without an LLM, or if the call fails, a template report is built from
+the same numbers, so the debrief always renders. Shown after the session only (decision
+0002): it explains what mattered, it does not steer a live negotiation.
+"""
+
+from __future__ import annotations
+
+from pydantic import BaseModel, Field
+
+from negotrain.cases.offers import best_points
+from negotrain.cases.scoring import efficiency, joint_points, max_joint_offer, score_offer
+from negotrain.feedback.rollouts import CounterfactualReport
+from negotrain.llm import LLM
+from negotrain.profiling.features import FLAG_DESCRIPTIONS, Features, extract_features, flags
+from negotrain.schemas import Case, Session
+
+
+class Moment(BaseModel):
+    turn_index: int = Field(description="The transcript turn number this moment refers to")
+    title: str = Field(description="A few words naming the moment")
+    what_happened: str
+    what_to_try: str = Field(description="A principle to practice next time, not a script")
+    evidence: str = Field(description="The numbers that support this, quoted from the input")
+
+
+class CoachingReport(BaseModel):
+    headline: str = Field(description="One sentence on how the negotiation went")
+    strengths: list[str] = Field(description="Two or three specific things done well")
+    improvements: list[str] = Field(description="Two or three specific things to work on")
+    moments: list[Moment] = Field(description="Two or three moments that mattered most")
+    next_focus: str = Field(description="The one skill to focus on in the next rehearsal")
+    source: str = "template"  # "llm" or "template"
+
+
+class OutcomeSummary(BaseModel):
+    status: str
+    points: float
+    reservation_value: float
+    best_possible: float
+    surplus: float
+    efficiency: float | None
+    their_points: float | None
+    max_joint: float
+    max_joint_deal: str
+
+
+def outcome_summary(session: Session, case: Case) -> OutcomeSummary:
+    me = case.role(session.user_role_id)
+    best_joint = max_joint_offer(case)
+    pts, eff, theirs = me.reservation_value, None, None
+    if session.status == "agreed" and session.agreement is not None:
+        pts = score_offer(case, me.id, session.agreement).points
+        eff = efficiency(case, session.agreement)
+        theirs = score_offer(case, session.counterpart_role_id, session.agreement).points
+    return OutcomeSummary(
+        status=session.status,
+        points=pts,
+        reservation_value=me.reservation_value,
+        best_possible=best_points(case, me.id),
+        surplus=pts - me.reservation_value,
+        efficiency=eff,
+        their_points=theirs,
+        max_joint=joint_points(case, best_joint),
+        max_joint_deal=best_joint.describe(case),
+    )
+
+
+def transcript(session: Session, case: Case) -> str:
+    """Transcript annotated with each offer's points for both sides (debrief view)."""
+    me, them = session.user_role_id, session.counterpart_role_id
+    lines = []
+    for t in session.turns:
+        who = "USER" if t.speaker == "user" else "COUNTERPART"
+        line = f"[{t.index}] {who}: {t.text}"
+        if t.offer:
+            u = score_offer(case, me, t.offer).points
+            c = score_offer(case, them, t.offer).points
+            line += f"\n    offer: {t.offer.describe(case)} (user {u:g} / counterpart {c:g} pts)"
+        if t.accept:
+            line += "\n    [accepts]"
+        if t.walk_away:
+            line += "\n    [walks away]"
+        lines.append(line)
+    return "\n".join(lines)
+
+
+def _counterfactual_lines(report: CounterfactualReport | None) -> str:
+    if report is None or not report.estimates:
+        return "(no counterfactual analysis was run)"
+    lines = []
+    for e in report.estimates:
+        lines.append(f"Turn {e.turn_index} ({e.description}):")
+        for v in e.values:
+            mean = "n/a" if v.mean is None else f"{v.mean:.0f}"
+            offer = f" offer: {v.action.offer.terms}" if v.action.offer else ""
+            lines.append(
+                f"  - {v.action.label}: mean {mean} pts over {len(v.outcomes)} rollouts, "
+                f"{v.agreements} agreements{offer}"
+            )
+    return "\n".join(lines)
+
+
+SYSTEM = """You are an experienced negotiation coach writing a debrief for a student who \
+just finished a practice negotiation against an AI counterpart. The negotiation is over; \
+both confidential sheets are now revealed.
+
+Teach, don't grade. Be specific: refer to transcript turn numbers and quote the numbers \
+you are given. Use only the numbers in the input; never compute or invent new ones. \
+"Moments" should be the two or three decisions that mattered most, preferring turns where \
+the counterfactual simulation shows a large gap between what the student did and an \
+alternative. Treat simulation estimates as rough evidence from a few rollouts, not as \
+certainty. "What to try" should be a transferable principle (for example, "make each \
+concession smaller than the last and ask for something in return"), not a script for this \
+exact case. Write in second person, plainly, without hype."""
+
+
+def _prompt(
+    session: Session,
+    case: Case,
+    outcome: OutcomeSummary,
+    features: Features,
+    flag_keys: list[str],
+    report: CounterfactualReport | None,
+) -> str:
+    me = case.role(session.user_role_id)
+    them = case.role(session.counterpart_role_id)
+
+    def sheet(role) -> str:
+        pts = "; ".join(
+            f"{case.issue(i).name}: " + ", ".join(f"{o}={p:g}" for o, p in t.items())
+            for i, t in role.points.items()
+        )
+        return (
+            f"{role.name}: {role.confidential_brief}\nPoints: {pts}\n"
+            f"Walk-away: {role.reservation_value:g}"
+        )
+
+    feats = ", ".join(f"{k}={v:.2f}" for k, v in features.items() if v is not None)
+    flag_text = "\n".join(f"- {FLAG_DESCRIPTIONS[k]}" for k in flag_keys) or "- none"
+    dials = session.counterpart_profile.model_dump() if session.counterpart_profile else "n/a"
+    return f"""# Case: {case.title}
+{case.public_brief}
+
+# Student's role
+{sheet(me)}
+
+# Counterpart's role (revealed after the session)
+{sheet(them)}
+Counterpart behavior profile: {dials}
+
+# Transcript
+{transcript(session, case)}
+
+# Outcome (computed by code)
+{outcome.model_dump_json(indent=1)}
+
+# Behavioral features (computed by code)
+{feats}
+
+# Error patterns detected
+{flag_text}
+
+# Counterfactual simulation (alternatives played forward against the same counterpart)
+{_counterfactual_lines(report)}
+
+Write the debrief."""
+
+
+def template_report(
+    session: Session,
+    case: Case,
+    outcome: OutcomeSummary,
+    flag_keys: list[str],
+    report: CounterfactualReport | None,
+) -> CoachingReport:
+    if session.status == "agreed":
+        headline = (
+            f"You reached a deal worth {outcome.points:g} points "
+            f"({outcome.surplus:+g} vs walking away)"
+            + (
+                f", at {outcome.efficiency:.0%} of the best joint outcome."
+                if outcome.efficiency
+                else "."
+            )
+        )
+    elif session.status == "impasse":
+        headline = f"No deal: you ended at your walk-away value of {outcome.points:g} points."
+    else:
+        headline = "The negotiation did not finish."
+    strengths = []
+    if "weak_anchor" not in flag_keys and session.latest_offer_from("user"):
+        strengths.append("You opened ambitiously, which set a favorable range.")
+    if "early_concession" not in flag_keys and "big_concessions" not in flag_keys:
+        strengths.append("You conceded with discipline rather than in big unreciprocated jumps.")
+    if "no_questions" not in flag_keys and any(
+        "?" in t.text for t in session.turns if t.speaker == "user"
+    ):
+        strengths.append("You asked questions to learn about the other side.")
+    if session.status == "agreed" and outcome.surplus > 0:
+        strengths.append("You closed a deal better than your walk-away value.")
+    improvements = [FLAG_DESCRIPTIONS[k] + "." for k in flag_keys] or [
+        "Keep practicing against tougher counterparts to test these habits under pressure."
+    ]
+    moments = []
+    if report:
+        ranked = sorted(
+            (e for e in report.estimates if e.delta is not None),
+            key=lambda e: -(e.delta or 0),
+        )
+        for e in ranked[:3]:
+            best = e.best_alternative
+            actual = e.actual.mean
+            if best is None or actual is None:
+                continue
+            better = (e.delta or 0) > 0
+            moments.append(
+                Moment(
+                    turn_index=e.turn_index,
+                    title=e.description,
+                    what_happened=f"{e.description} (turn {e.turn_index}).",
+                    what_to_try=(
+                        f"Consider the '{best.action.label.lower()}' option next time."
+                        if better
+                        else "Your choice here held up well against the alternatives."
+                    ),
+                    evidence=(
+                        f"In simulation, what you did averaged {actual:.0f} points; "
+                        f"'{best.action.label}' averaged {best.mean:.0f}."
+                    ),
+                )
+            )
+    profile_focus = {
+        "weak_anchor": "anchoring",
+        "early_concession": "concession discipline",
+        "big_concessions": "concession discipline",
+        "no_logroll": "trading across issues",
+        "no_questions": "asking questions",
+        "accepted_low": "claiming value",
+        "below_walkaway": "knowing your walk-away",
+        "impasse_with_zopa": "closing",
+    }
+    focus = profile_focus.get(flag_keys[0], "consistency") if flag_keys else "consistency"
+    return CoachingReport(
+        headline=headline,
+        strengths=strengths[:3] or ["You completed the rehearsal."],
+        improvements=improvements[:3],
+        moments=moments,
+        next_focus=focus,
+        source="template",
+    )
+
+
+def build_report(
+    session: Session,
+    case: Case,
+    counterfactuals: CounterfactualReport | None = None,
+    llm: LLM | None = None,
+) -> CoachingReport:
+    outcome = outcome_summary(session, case)
+    features = extract_features(session, case)
+    flag_keys = flags(session, case, features)
+    if llm is not None:
+        try:
+            report = llm.parse(
+                SYSTEM,
+                [
+                    {
+                        "role": "user",
+                        "content": _prompt(
+                            session, case, outcome, features, flag_keys, counterfactuals
+                        ),
+                    }
+                ],
+                CoachingReport,
+            )
+            return report.model_copy(update={"source": "llm"})
+        except Exception:  # noqa: BLE001 - fall back to the template; the debrief must render
+            pass
+    return template_report(session, case, outcome, flag_keys, counterfactuals)
+
+
+class Debrief(BaseModel):
+    """Everything the Feedback page stores per session (data/sessions/feedback/<id>.json)."""
+
+    counterfactuals: CounterfactualReport | None = None
+    report: CoachingReport
+    usefulness: int | None = Field(default=None, description="Participant rating, 1-5")
+    llm_calls: int = 0
+    est_cost: float = 0.0

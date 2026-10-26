@@ -7,6 +7,7 @@ place, keep token accounting for cost estimates, and run the whole stack offline
 
 from __future__ import annotations
 
+import threading
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from typing import Any, Protocol, TypeVar
@@ -43,18 +44,39 @@ class LLM(Protocol):
     ) -> T: ...
 
 
+# USD per million tokens for cost estimates (claude-opus-5-5; update if the model changes).
+PRICE_PER_MTOK = {"input": 4.00, "output": 20.00, "cache_read": 0.20, "cache_write": 5.00}
+
+
 @dataclass
 class Usage:
     calls: int = 0
     input_tokens: int = 0
     output_tokens: int = 0
     cache_read_input_tokens: int = 0
+    cache_creation_input_tokens: int = 0
+    # Rollouts call the API from several threads.
+    _lock: threading.Lock = field(default_factory=threading.Lock, repr=False, compare=False)
 
     def add(self, usage: Any) -> None:
-        self.calls += 1
-        self.input_tokens += usage.input_tokens or 0
-        self.output_tokens += usage.output_tokens or 0
-        self.cache_read_input_tokens += getattr(usage, "cache_read_input_tokens", 0) or 0
+        with self._lock:
+            self.calls += 1
+            self.input_tokens += usage.input_tokens or 0
+            self.output_tokens += usage.output_tokens or 0
+            self.cache_read_input_tokens += getattr(usage, "cache_read_input_tokens", 0) or 0
+            self.cache_creation_input_tokens += (
+                getattr(usage, "cache_creation_input_tokens", 0) or 0
+            )
+
+    def cost(self) -> float:
+        """Estimated USD at PRICE_PER_MTOK (cache writes approximated at the 5-minute rate)."""
+        p = PRICE_PER_MTOK
+        return (
+            self.input_tokens * p["input"]
+            + self.output_tokens * p["output"]
+            + self.cache_read_input_tokens * p["cache_read"]
+            + self.cache_creation_input_tokens * p["cache_write"]
+        ) / 1e6
 
 
 class ClaudeLLM:

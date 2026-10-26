@@ -1,10 +1,10 @@
 ---
 id: T-028
 title: Rehearsal-vs-real debrief
-status: todo
+status: in-progress
 milestone: M2
 workstream: app
-owner: unassigned
+owner: mahdi
 depends_on: [T-015, T-024]
 ---
 
@@ -15,7 +15,8 @@ After a real negotiation, compare it with the rehearsal: predicted vs actual cou
 Feeds the RQ2 (sim2real gap) analysis.
 
 ## Acceptance criteria
-- [ ] Debrief view in the UI
+- [x] Debrief view in the UI
 - [ ] Comparison data exported for analysis
 
 ## Log
+- 2026-10-25: MVP branch: Real negotiation page logs kind='real' sessions and compares with rehearsals (points, dials). No export yet.

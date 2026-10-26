@@ -1,15 +1,18 @@
 """The counterpart agent: plays the other side from its hidden role sheet and profile.
 
-v1 is prompt-driven with code-level guards (valid ids, never accept or propose a complete
-deal below the reservation value). T-011 adds a code-enforced concession schedule so
-difficulty does not depend on the prompt alone.
+The LLM writes the dialogue and picks offers; code enforces the economics (decision 0003):
+valid ids, never below the reservation value, and (unless ``enforce_schedule`` is off, for
+the prompt-only vs hybrid comparison in T-017) never below the current aspiration level.
+If the model keeps producing invalid moves, code makes a counteroffer instead of failing.
 """
 
 from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
+from negotrain.cases.offers import closest_offer
 from negotrain.cases.scoring import score_offer
+from negotrain.counterpart.aspiration import aspiration
 from negotrain.counterpart.profiles import describe
 from negotrain.llm import LLM, Message
 from negotrain.schemas import Case, CounterpartProfile, Offer, Session, Turn
@@ -32,12 +35,30 @@ class CounterpartMove(BaseModel):
 
 
 class CounterpartAgent:
-    def __init__(self, case: Case, role_id: str, profile: CounterpartProfile, llm: LLM):
+    def __init__(
+        self,
+        case: Case,
+        role_id: str,
+        profile: CounterpartProfile,
+        llm: LLM,
+        *,
+        enforce_schedule: bool = True,
+    ):
         self.case = case
         self.role = case.role(role_id)
         self.profile = profile
         self.llm = llm
+        self.enforce_schedule = enforce_schedule
+        self.fallbacks = 0  # moves code had to make because the model kept erring
         self.system = self._system_prompt()
+
+    def minimum(self, session: Session) -> float:
+        """Least points this side may propose or accept this turn."""
+        if not self.enforce_schedule:
+            return self.role.reservation_value
+        return max(
+            self.role.reservation_value, aspiration(self.case, self.role.id, self.profile, session)
+        )
 
     def _system_prompt(self) -> str:
         issues = "\n".join(
@@ -86,10 +107,21 @@ formal offer exactly as stated."""
             )
         elif messages[-1]["role"] == "assistant":
             messages.append({"role": "user", "content": "[The other side is waiting for you.]"})
+        if self.enforce_schedule:
+            # Per-turn content goes in messages so the system prompt stays cacheable.
+            messages.append(
+                {
+                    "role": "user",
+                    "content": f"[Private note, unseen by the other side: at this stage only "
+                    f"propose or accept complete deals worth at least "
+                    f"{self.minimum(session):.0f} points to you.]",
+                }
+            )
         return _merge_consecutive(messages)
 
     def _problems(self, move: CounterpartMove, session: Session) -> list[str]:
         problems = []
+        minimum = self.minimum(session)
         terms = {}
         for term in move.offer:
             try:
@@ -108,13 +140,22 @@ formal offer exactly as stated."""
                 result = score_offer(self.case, self.role.id, theirs)
                 if not result.valid or result.surplus < 0:
                     problems.append("their offer is worse for you than walking away")
+                elif result.points < minimum:
+                    problems.append(
+                        f"their offer is worth {result.points:g} to you; hold out for at "
+                        f"least {minimum:.0f} at this stage"
+                    )
         if terms and not problems:
             mine = Offer(terms=terms)
-            if (
-                mine.is_complete(self.case)
-                and score_offer(self.case, self.role.id, mine).surplus < 0
-            ):
-                problems.append("that offer is worse for you than walking away")
+            if mine.is_complete(self.case):
+                result = score_offer(self.case, self.role.id, mine)
+                if result.surplus < 0:
+                    problems.append("that offer is worse for you than walking away")
+                elif result.points < minimum:
+                    problems.append(
+                        f"that offer is worth {result.points:g} to you; at this stage only "
+                        f"offer deals worth at least {minimum:.0f}"
+                    )
         return problems
 
     def respond(self, session: Session) -> Turn:
@@ -143,7 +184,27 @@ formal offer exactly as stated."""
                     + ". Reply again.]",
                 },
             ]
-        raise RuntimeError(f"counterpart produced no valid move in {MAX_ATTEMPTS} attempts")
+        return self._fallback(session)
+
+    def _fallback(self, session: Session) -> Turn:
+        """A code-made counteroffer at the current minimum, near the user's latest offer."""
+        self.fallbacks += 1
+        offer = closest_offer(
+            self.case, self.role.id, self.minimum(session), session.latest_offer_from("user")
+        )
+        if offer is None:
+            return Turn(
+                index=len(session.turns),
+                speaker="counterpart",
+                text="I don't see a deal here that works for us.",
+                walk_away=True,
+            )
+        return Turn(
+            index=len(session.turns),
+            speaker="counterpart",
+            text="Let me put something concrete on the table.",
+            offer=offer,
+        )
 
 
 def _render_own(turn: Turn) -> str:

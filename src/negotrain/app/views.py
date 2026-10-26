@@ -1,0 +1,996 @@
+"""Pages of the NegoTrain app (T-014, MVP of the five workflow stages). main.py wires them up.
+
+Pages follow the proposal's workflow: onboarding (Start), personalization and practice
+(Rehearse, with the curriculum's recommended counterpart), coaching and feedback (Feedback,
+post-session only), strengths and weaknesses (My profile), and sim-to-real comparison (Real
+negotiation). Case library imports new cases with the parser.
+
+Information hiding: the counterpart's sheet is never rendered before a session ends, and the
+counterpart agent never receives the user's sheet. Without an API key (or with
+NEGOTRAIN_OFFLINE=1) everything runs on the rule-based counterpart and template feedback.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import os
+import random
+
+import streamlit as st
+
+from negotrain import config
+from negotrain.cases import case_library, save_private_case
+from negotrain.cases.offers import surplus_share
+from negotrain.cases.parser import parse_case
+from negotrain.cases.scoring import score_offer
+from negotrain.counterpart import TIERS, CounterpartAgent, RuleBasedCounterpart
+from negotrain.counterpart.profiles import DIALS
+from negotrain.curriculum import ScenarioSpec, counterpart_for, next_scenario
+from negotrain.feedback import (
+    CoachingReport,
+    CounterfactualReport,
+    Debrief,
+    analyze_session,
+    build_report,
+    estimate_calls,
+    outcome_summary,
+)
+from negotrain.llm import ClaudeLLM, LLMRefusal
+from negotrain.profiling import FLAG_DESCRIPTIONS, SKILLS, build_profile, extract_features
+from negotrain.schemas import Case, CounterpartProfile, Offer, Participant, Session, Turn
+from negotrain.sessions import ParticipantStore, SessionStore
+
+# Filled in by main.py so pages can link to each other with st.switch_page.
+PAGES: dict[str, st.Page] = {}
+
+LEAVE_OPEN = "— leave open —"
+EST_COST_PER_CALL = 0.03  # USD, conservative for claude-opus-5-5 at low effort
+DIAL_QUESTIONS = {
+    "anchoring": "How extreme was their opening position?",
+    "concession_rate": "How readily did they give ground?",
+    "cooperativeness": "How open were they to trades / joint problem-solving?",
+    "aggression": "How forceful or aggressive were they?",
+    "disclosure": "How much did they share about their priorities?",
+    "bluffing": "How much did they seem to exaggerate or bluff?",
+}
+
+
+# --------------------------------------------------------------------------- resources
+
+
+def _key_fingerprint() -> str:
+    key = os.getenv("ANTHROPIC_API_KEY", "") + os.getenv("ANTHROPIC_AUTH_TOKEN", "")
+    return hashlib.sha256(key.encode()).hexdigest()[:8]
+
+
+@st.cache_resource
+def _llm(effort: str, fingerprint: str) -> ClaudeLLM:
+    return ClaudeLLM(effort=effort)
+
+
+def llm(effort: str | None = None) -> ClaudeLLM:
+    return _llm(effort or config.effort(), _key_fingerprint())
+
+
+def online() -> bool:
+    return config.has_api_key() and not st.session_state.get("offline", config.offline())
+
+
+def stores() -> tuple[SessionStore, ParticipantStore]:
+    return SessionStore(), ParticipantStore()
+
+
+def library() -> dict[str, tuple[Case, object]]:
+    return case_library()
+
+
+def participant() -> Participant | None:
+    pid = st.session_state.get("pid")
+    return ParticipantStore().load(pid) if pid else None
+
+
+def counterpart_factory(session: Session, case: Case, *, use_llm: bool, effort: str):
+    """A zero-argument factory. Reads Streamlit state now, because rollouts call it from
+    worker threads where session state is unavailable."""
+    profile = session.counterpart_profile or TIERS[3]
+    role_id = session.counterpart_role_id
+    if use_llm:
+        client = llm(effort)
+        enforce = st.session_state.get("enforce_schedule", True)
+        return lambda: CounterpartAgent(case, role_id, profile, client, enforce_schedule=enforce)
+    return lambda: RuleBasedCounterpart(case, role_id, profile)
+
+
+def make_counterpart(session: Session, case: Case):
+    return counterpart_factory(session, case, use_llm=online(), effort=config.chat_effort())()
+
+
+def history(pid: str) -> list[tuple[Session, Case]]:
+    lib = library()
+    return [(s, lib[s.case_id][0]) for s in SessionStore().for_participant(pid) if s.case_id in lib]
+
+
+# --------------------------------------------------------------------------- rendering
+
+
+def points_table(case: Case, role_id: str) -> list[dict]:
+    role = case.role(role_id)
+    rows = []
+    for issue in case.issues:
+        for opt in issue.options:
+            rows.append(
+                {"Issue": issue.name, "Option": opt.label, "Points": role.points[issue.id][opt.id]}
+            )
+    return rows
+
+
+def render_sheet(case: Case, role_id: str, *, title: str) -> None:
+    role = case.role(role_id)
+    st.markdown(f"**{title}: {role.name}**")
+    if role.inferred:
+        st.caption("This sheet was estimated by the parser, not taken from the case materials.")
+    st.write(role.confidential_brief)
+    st.dataframe(points_table(case, role_id), hide_index=True, width="stretch")
+    st.markdown(f"Walk-away (no deal) value: **{role.reservation_value:g} points**")
+    for c in role.constraints:
+        st.caption(f"Constraint: {c.description}")
+
+
+def describe_offer(case: Case, offer: Offer, role_id: str) -> str:
+    result = score_offer(case, role_id, offer)
+    worth = f"worth **{result.points:g}** to you"
+    if not offer.is_complete(case):
+        worth += " on the issues it covers (partial offer)"
+    return f"{offer.describe(case)} — {worth}"
+
+
+def render_turn(case: Case, session: Session, turn: Turn) -> None:
+    is_user = turn.speaker == "user"
+    name = "You" if is_user else case.role(session.counterpart_role_id).name
+    with st.chat_message("user" if is_user else "assistant"):
+        st.markdown(f"**{name}** · turn {turn.index}")
+        if turn.text:
+            st.write(turn.text)
+        if turn.offer:
+            st.info("📝 Formal offer: " + describe_offer(case, turn.offer, session.user_role_id))
+        if turn.accept:
+            st.success("✅ Accepts the latest offer.")
+        if turn.walk_away:
+            st.error("🚪 Walks away.")
+
+
+def outcome_metrics(session: Session, case: Case) -> None:
+    o = outcome_summary(session, case)
+    cols = st.columns(4)
+    cols[0].metric("Result", {"agreed": "Deal", "impasse": "No deal"}.get(o.status, o.status))
+    cols[1].metric("Your points", f"{o.points:g}", f"{o.surplus:+g} vs walk-away")
+    cols[2].metric("Best possible for you", f"{o.best_possible:g}")
+    cols[3].metric("Joint efficiency", f"{o.efficiency:.0%}" if o.efficiency is not None else "—")
+
+
+# --------------------------------------------------------------------------- sidebar
+
+
+def sidebar() -> None:
+    with st.sidebar:
+        p = participant()
+        if p:
+            st.markdown(f"Participant: **{p.id}**")
+            if st.button("Switch participant", width="stretch"):
+                for key in ("pid", "session", "case"):
+                    st.session_state.pop(key, None)
+                st.rerun()
+        st.divider()
+        if not config.has_api_key():
+            key = st.text_input(
+                "Anthropic API key",
+                type="password",
+                help="Kept in this server process only. Or put ANTHROPIC_API_KEY in .env.",
+            )
+            if key:
+                os.environ["ANTHROPIC_API_KEY"] = key.strip()
+                st.rerun()
+        st.session_state.setdefault("offline", config.offline())
+        st.toggle(
+            "Offline mode (no API calls)",
+            key="offline",
+            disabled=not config.has_api_key(),
+            help="Rule-based counterpart and template feedback. Forced on without an API key.",
+        )
+        if online():
+            st.caption(f"Claude: `{config.model()}` · chat effort `{config.chat_effort()}`")
+            calls = sum(_llm(e, _key_fingerprint()).usage.calls for e in ("low", "medium", "high"))
+            cost = sum(_llm(e, _key_fingerprint()).usage.cost() for e in ("low", "medium", "high"))
+            st.caption(f"API usage this server run: {calls} calls, ~${cost:.2f}")
+        else:
+            st.caption("Running offline: rule-based counterpart, template feedback.")
+        st.divider()
+        st.toggle(
+            "Facilitator mode",
+            key="facilitator",
+            help="Shows full case files, including confidential sheets. Off for participants.",
+        )
+        with st.expander("Advanced"):
+            st.checkbox(
+                "Enforce concession schedule in code",
+                value=True,
+                key="enforce_schedule",
+                help="Off = prompt-only counterpart (for the T-017 comparison).",
+            )
+
+
+# --------------------------------------------------------------------------- pages
+
+
+def page_start() -> None:
+    st.title("🤝 NegoTrain")
+    st.write(
+        "Rehearse negotiations against an AI counterpart that adapts to you. After each "
+        "rehearsal you get a debrief: what happened, which moments mattered (estimated by "
+        "simulating alternatives), and what to practice next. There are no hints during a "
+        "negotiation; feedback comes afterwards."
+    )
+    st.markdown(
+        "1. **Start**: enter your participant id (and complete onboarding once).\n"
+        "2. **Rehearse**: pick a case and role; the counterpart is chosen for you or by you.\n"
+        "3. **Feedback**: generate your debrief after the session ends.\n"
+        "4. **My profile**: strengths, weaknesses, and the recommended next scenario.\n"
+        "5. **Real negotiation**: log the real outcome and compare with your rehearsals."
+    )
+    pid = st.text_input(
+        "Participant id",
+        value=st.session_state.get("pid", ""),
+        help="A pseudonym or the id you were given. Don't use your real name.",
+    ).strip()
+    if not pid:
+        return
+    if pid != st.session_state.get("pid"):
+        st.session_state["pid"] = pid
+        st.session_state.pop("session", None)
+    _, people = stores()
+    existing = people.load(pid)
+    if existing and existing.consented:
+        st.success(f"Welcome back, {pid}. Head to **Rehearse** in the sidebar.")
+        return
+
+    st.subheader("Onboarding")
+    with st.form("onboarding"):
+        consent = st.checkbox(
+            "I agree to take part. I understand that my negotiation messages are sent to "
+            "Anthropic's Claude API to generate the counterpart and feedback, that my data "
+            "is stored under this pseudonymous id only, and that I should not type personal "
+            "information into the chat."
+        )
+        experience = st.radio(
+            "Negotiation experience", ["none", "some", "lots"], index=1, horizontal=True
+        )
+        goals = st.text_area("What do you want to get better at?")
+        st.markdown("Rate yourself (1 = weak, 5 = strong):")
+        ratings = {
+            key: st.slider(label, 1, 5, 3, key=f"self_{key}")
+            for key, (label, _, _) in SKILLS.items()
+        }
+        if st.form_submit_button("Save and continue", type="primary"):
+            if not consent:
+                st.error("Please confirm consent to continue.")
+            else:
+                people.save(
+                    Participant(
+                        id=pid,
+                        experience=experience,
+                        goals=goals,
+                        self_ratings=ratings,
+                        consented=True,
+                    )
+                )
+                st.success("Saved. Head to **Rehearse** in the sidebar.")
+
+
+def _require_participant() -> Participant | None:
+    p = participant()
+    if p is None or not p.consented:
+        st.warning("Enter your participant id and complete onboarding on the **Start** page.")
+        return None
+    return p
+
+
+def _setup_rehearsal(p: Participant) -> None:
+    lib = library()
+    if not lib:
+        st.error("No cases found. Add one in the Case library.")
+        return
+    st.subheader("Set up a rehearsal")
+    hist = history(p.id)
+    profile = build_profile(p.id, hist)
+    spec = next_scenario(profile, hist, sorted(lib))
+    preset: ScenarioSpec | None = st.session_state.get("preset")
+
+    ids = sorted(lib)
+    default_case = (preset or spec).case_id if (preset or spec).case_id in lib else ids[0]
+    case_id = st.selectbox(
+        "Case", ids, index=ids.index(default_case), format_func=lambda c: lib[c][0].title
+    )
+    case = lib[case_id][0]
+    st.caption(case.public_brief)
+    role_id = st.radio(
+        "Your role",
+        [r.id for r in case.roles],
+        format_func=lambda r: case.role(r).name,
+        horizontal=True,
+    )
+    mode = st.radio(
+        "Counterpart",
+        ["Recommended for me", "I'll choose the difficulty"],
+        index=0,
+        horizontal=True,
+    )
+    if mode == "Recommended for me":
+        chosen = preset or spec
+        st.info(f"**Tier {chosen.tier} counterpart.** {chosen.rationale}")
+    else:
+        tier = st.select_slider(
+            "Difficulty tier",
+            options=list(TIERS),
+            value=3,
+            format_func=lambda t: f"{t} · {TIERS[t].name}",
+        )
+        chosen = ScenarioSpec(tier=tier, rationale=f"Chosen by you: tier {tier}.")
+    opener = st.radio("Who opens?", ["Me", "The counterpart"], horizontal=True)
+    if st.button("Start rehearsal", type="primary"):
+        seed = random.randrange(1_000_000)
+        counterpart_profile = counterpart_for(chosen, random.Random(seed))
+        session = Session(
+            participant_id=p.id,
+            case_id=case.id,
+            user_role_id=role_id,
+            counterpart_role_id=case.other_role(role_id).id,
+            counterpart_profile=counterpart_profile,
+            notes=f"seed={seed}; {chosen.rationale}",
+        )
+        st.session_state["session"] = session
+        st.session_state["case"] = case
+        st.session_state.pop("preset", None)
+        SessionStore().save(session)
+        if opener == "The counterpart":
+            _counterpart_reply(session, case)
+        st.rerun()
+
+
+def _counterpart_reply(session: Session, case: Case) -> None:
+    with st.spinner(f"{case.role(session.counterpart_role_id).name} is responding…"):
+        try:
+            reply = make_counterpart(session, case).respond(session)
+            session.add_turn(reply, case)
+        except LLMRefusal:
+            st.error("The model declined to respond to that. Rephrase your message and retry.")
+        except Exception as e:  # noqa: BLE001 - surface API errors without losing the session
+            st.error(f"Counterpart error: {e}. Use **Retry counterpart** below.")
+    SessionStore().save(session)
+
+
+def _user_move(session: Session, case: Case, turn: Turn) -> None:
+    try:
+        session.add_turn(turn, case)
+    except ValueError as e:
+        st.error(str(e))
+        return
+    SessionStore().save(session)
+    if session.status == "active":
+        _counterpart_reply(session, case)
+    st.rerun()
+
+
+def _move_controls(session: Session, case: Case) -> None:
+    last = session.turns[-1] if session.turns else None
+    if last is not None and last.speaker == "user":
+        st.warning("The counterpart hasn't replied yet.")
+        if st.button("Retry counterpart"):
+            _counterpart_reply(session, case)
+            st.rerun()
+        return
+
+    with st.form("move", clear_on_submit=True):
+        text = st.text_area("Your message", placeholder="Say what you'd say across the table…")
+        attach = st.checkbox("Attach a formal offer")
+        cols = st.columns(min(3, len(case.issues)))
+        picks = {}
+        for n, issue in enumerate(case.issues):
+            labels = [LEAVE_OPEN] + [o.label for o in issue.options]
+            picks[issue.id] = cols[n % len(cols)].selectbox(issue.name, labels, key=f"o_{issue.id}")
+        if st.form_submit_button("Send", type="primary"):
+            terms = {}
+            for issue in case.issues:
+                label = picks[issue.id]
+                if label != LEAVE_OPEN:
+                    terms[issue.id] = next(o.id for o in issue.options if o.label == label)
+            offer = Offer(terms=terms) if attach and terms else None
+            if not text.strip() and offer is None:
+                st.error("Write a message or attach an offer.")
+            else:
+                _user_move(
+                    session,
+                    case,
+                    Turn(index=len(session.turns), speaker="user", text=text.strip(), offer=offer),
+                )
+
+    theirs = session.latest_offer_from("counterpart")
+    c1, c2 = st.columns(2)
+    with c1:
+        can_accept = theirs is not None and theirs.is_complete(case)
+        if st.button(
+            "✅ Accept their latest offer",
+            disabled=not can_accept,
+            help=None if can_accept else "They haven't made a complete offer yet.",
+            width="stretch",
+        ):
+            _user_move(
+                session,
+                case,
+                Turn(index=len(session.turns), speaker="user", text="I accept.", accept=True),
+            )
+    with c2:
+        sure = st.checkbox("I'm sure I want to walk away")
+        if st.button("🚪 Walk away", disabled=not sure, width="stretch"):
+            _user_move(
+                session,
+                case,
+                Turn(
+                    index=len(session.turns),
+                    speaker="user",
+                    text="I'm going to walk away.",
+                    walk_away=True,
+                ),
+            )
+
+
+def page_rehearse() -> None:
+    st.title("Rehearse")
+    p = _require_participant()
+    if p is None:
+        return
+    session: Session | None = st.session_state.get("session")
+    case: Case | None = st.session_state.get("case")
+    if session is None or case is None or session.participant_id != p.id:
+        _setup_rehearsal(p)
+        return
+
+    them = case.role(session.counterpart_role_id)
+    st.subheader(f"{case.title} — you are the {case.role(session.user_role_id).name}")
+    tier = session.counterpart_profile.tier if session.counterpart_profile else "?"
+    st.caption(f"Counterpart: {them.name} (tier {tier}). Session `{session.id}`.")
+
+    chat, side = st.columns([3, 2], gap="large")
+    with side:
+        with st.expander("Public information", expanded=False):
+            st.write(case.public_brief)
+        with st.expander("Your confidential sheet", expanded=True):
+            render_sheet(case, session.user_role_id, title="Your role")
+        mine, theirs = session.latest_offer_from("user"), session.latest_offer_from("counterpart")
+        st.markdown("**On the table**")
+        st.markdown(
+            "- Their latest offer: "
+            + (describe_offer(case, theirs, session.user_role_id) if theirs else "none yet")
+        )
+        st.markdown(
+            "- Your latest offer: "
+            + (describe_offer(case, mine, session.user_role_id) if mine else "none yet")
+        )
+    with chat:
+        if not session.turns:
+            st.caption("You open. Introduce yourself, ask questions, or make an offer.")
+        for turn in session.turns:
+            render_turn(case, session, turn)
+        if session.status == "active":
+            _move_controls(session, case)
+            with st.expander("End without an outcome"):
+                if st.button("Abandon this rehearsal"):
+                    session.status = "abandoned"
+                    SessionStore().save(session)
+                    st.session_state.pop("session", None)
+                    st.rerun()
+        else:
+            _finished(session, case)
+
+
+def _finished(session: Session, case: Case) -> None:
+    st.divider()
+    if session.status == "agreed" and session.agreement:
+        st.success("Deal: " + describe_offer(case, session.agreement, session.user_role_id))
+    else:
+        st.error("No deal.")
+    outcome_metrics(session, case)
+    with st.expander("Debrief: the counterpart's confidential sheet"):
+        render_sheet(case, session.counterpart_role_id, title="Their role")
+    c1, c2 = st.columns(2)
+    if c1.button("Get my feedback →", type="primary", width="stretch"):
+        st.session_state["feedback_session"] = session.id
+        st.switch_page(PAGES["feedback"])
+    if c2.button("New rehearsal", width="stretch"):
+        st.session_state.pop("session", None)
+        st.rerun()
+
+
+def page_feedback() -> None:
+    st.title("Feedback")
+    p = _require_participant()
+    if p is None:
+        return
+    store = SessionStore()
+    lib = library()
+    done = [
+        s
+        for s in reversed(store.for_participant(p.id))
+        if s.kind == "rehearsal" and s.status in ("agreed", "impasse") and s.case_id in lib
+    ]
+    if not done:
+        st.info("Finish a rehearsal first; feedback appears here afterwards.")
+        return
+    wanted = st.session_state.get("feedback_session")
+    ids = [s.id for s in done]
+    by_id = {s.id: s for s in done}
+    sid = st.selectbox(
+        "Rehearsal",
+        ids,
+        index=ids.index(wanted) if wanted in ids else 0,
+        format_func=lambda i: (
+            f"{by_id[i].created_at:%b %d %H:%M} · {lib[by_id[i].case_id][0].title}"
+            f" · {by_id[i].status}"
+        ),
+    )
+    session = by_id[sid]
+    case = lib[session.case_id][0]
+    outcome_metrics(session, case)
+
+    debrief = store.load_artifact(session.id, "feedback", Debrief)
+    with st.expander("Feedback settings", expanded=debrief is None):
+        sim_choice = st.radio(
+            "Simulate alternatives against",
+            ["Same AI counterpart (slower, uses API)", "Fast rule-based simulator (free)"],
+            index=0 if online() else 1,
+            disabled=not online(),
+        )
+        use_llm = online() and sim_choice.startswith("Same")
+        c = st.columns(4)
+        cap = c[0].number_input("Moments to analyze", 1, 5, 3)
+        k = c[1].number_input("Alternatives each", 1, 4, 2)
+        n = c[2].number_input("Rollouts each", 1, 6, 2 if use_llm else 1)
+        horizon = c[3].number_input("AI turns per rollout", 2, 10, 4)
+        if use_llm:
+            calls = estimate_calls(int(cap), int(k), int(n), int(horizon)) + 1
+            st.caption(
+                f"Up to ~{calls} API calls (≈ ${calls * EST_COST_PER_CALL:.2f}), typically 1–3 min."
+            )
+    if st.button("Generate feedback" if debrief is None else "Regenerate feedback", type="primary"):
+        with st.spinner("Simulating alternatives and writing your debrief…"):
+            calls_before = _total_calls()
+            cost_before = _total_cost()
+            counterfactuals = analyze_session(
+                session,
+                case,
+                counterpart_factory(session, case, use_llm=use_llm, effort="low"),
+                opponent="llm" if use_llm else "rule-based",
+                cap=int(cap),
+                k=int(k),
+                n=int(n),
+                horizon=int(horizon),
+            )
+            report = build_report(session, case, counterfactuals, llm() if online() else None)
+            debrief = Debrief(
+                counterfactuals=counterfactuals,
+                report=report,
+                llm_calls=_total_calls() - calls_before,
+                est_cost=_total_cost() - cost_before,
+            )
+            store.save_artifact(session.id, "feedback", debrief)
+
+    if debrief is None:
+        return
+    tabs = st.tabs(["Coaching", "Moments that mattered", "Transcript", "Both sheets", "Numbers"])
+    with tabs[0]:
+        _render_report(debrief.report)
+        st.divider()
+        rating = st.radio(
+            "How useful was this feedback? (1 = not at all, 5 = very)",
+            [1, 2, 3, 4, 5],
+            index=(debrief.usefulness - 1) if debrief.usefulness else None,
+            horizontal=True,
+        )
+        if rating and rating != debrief.usefulness:
+            debrief.usefulness = rating
+            store.save_artifact(session.id, "feedback", debrief)
+            st.toast("Thanks!")
+    with tabs[1]:
+        _render_counterfactuals(debrief.counterfactuals, session, case)
+    with tabs[2]:
+        for turn in session.turns:
+            render_turn(case, session, turn)
+    with tabs[3]:
+        a, b = st.columns(2)
+        with a:
+            render_sheet(case, session.user_role_id, title="Your role")
+        with b:
+            render_sheet(case, session.counterpart_role_id, title="Their role")
+        o = outcome_summary(session, case)
+        st.caption(f"Best joint deal: {o.max_joint_deal} ({o.max_joint:g} joint points).")
+    with tabs[4]:
+        f = extract_features(session, case)
+        st.dataframe([{"feature": k, "value": v} for k, v in f.items()], hide_index=True)
+        if session.counterpart_profile:
+            st.caption(
+                "Counterpart dials: "
+                + ", ".join(f"{d}={getattr(session.counterpart_profile, d):.2f}" for d in DIALS)
+            )
+        st.caption(
+            f"Feedback cost: {debrief.llm_calls} API calls (~${debrief.est_cost:.2f}); "
+            f"simulation took {debrief.counterfactuals.seconds:.0f}s"
+            if debrief.counterfactuals
+            else ""
+        )
+
+
+def _total_calls() -> int:
+    if not online():
+        return 0
+    return sum(_llm(e, _key_fingerprint()).usage.calls for e in ("low", "medium", "high"))
+
+
+def _total_cost() -> float:
+    if not online():
+        return 0.0
+    return sum(_llm(e, _key_fingerprint()).usage.cost() for e in ("low", "medium", "high"))
+
+
+def _render_report(report: CoachingReport) -> None:
+    st.subheader(report.headline)
+    a, b = st.columns(2)
+    with a:
+        st.markdown("**What went well**")
+        for s in report.strengths:
+            st.markdown(f"- {s}")
+    with b:
+        st.markdown("**What to work on**")
+        for s in report.improvements:
+            st.markdown(f"- {s}")
+    if report.moments:
+        st.markdown("**Moments that mattered**")
+        for m in report.moments:
+            with st.container(border=True):
+                st.markdown(f"**Turn {m.turn_index}: {m.title}**")
+                st.write(m.what_happened)
+                st.markdown(f"*Try:* {m.what_to_try}")
+                st.caption(m.evidence)
+    st.info(f"**Next focus:** {report.next_focus}")
+    if report.source == "template":
+        st.caption("Template feedback (offline or the coaching model was unavailable).")
+
+
+def _render_counterfactuals(
+    report: CounterfactualReport | None, session: Session, case: Case
+) -> None:
+    if report is None or not report.estimates:
+        st.info("No offers, acceptances, or walk-aways to analyze in this session.")
+        return
+    st.caption(
+        f"Each option was played forward {report.n_rollouts}× against "
+        f"{'the same AI counterpart' if report.opponent == 'llm' else 'a rule-based simulator'}"
+        " by a simulated version of you. Points are your expected outcome; treat small "
+        "differences as noise."
+    )
+    for e in report.estimates:
+        turn = session.turns[e.turn_index]
+        with st.container(border=True):
+            delta = e.delta
+            head = f"**Turn {e.turn_index}: {e.description}**"
+            if delta is not None:
+                head += f" · best alternative {delta:+.0f} pts"
+            st.markdown(head)
+            if turn.text:
+                st.caption(f"You said: “{turn.text}”")
+            rows = []
+            for v in e.values:
+                a = v.action
+                what = (
+                    a.offer.describe(case)
+                    if a.offer
+                    else "accept"
+                    if a.accept
+                    else "walk away"
+                    if a.walk_away
+                    else f"“{a.text}”"
+                )
+                rows.append(
+                    {
+                        "Option": a.label,
+                        "Move": what,
+                        "Expected points": round(v.mean) if v.mean is not None else None,
+                        "Deals": f"{v.agreements}/{len(v.outcomes)}",
+                    }
+                )
+            st.dataframe(rows, hide_index=True, width="stretch")
+            errors = sum(v.errors for v in e.values)
+            if errors:
+                st.caption(f"{errors} rollout(s) failed (API errors) and were skipped.")
+
+
+def page_profile() -> None:
+    st.title("My profile")
+    p = _require_participant()
+    if p is None:
+        return
+    hist = history(p.id)
+    prof = build_profile(p.id, hist)
+    st.caption(
+        f"Based on {prof.n_sessions} finished session(s). Scores start at 0.5 and move with "
+        "evidence; confidence grows with the number of sessions."
+    )
+    for s in prof.skills:
+        label = f"{s.label}: {s.score:.2f}  ·  confidence {s.confidence:.0%}"
+        if s.skill in p.self_ratings:
+            label += f"  ·  self-rating {p.self_ratings[s.skill]}/5"
+        st.progress(min(1.0, max(0.0, s.score)), text=label)
+        st.caption(s.description)
+    a, b = st.columns(2)
+    with a:
+        st.markdown("**Strengths**")
+        for k in prof.strengths or []:
+            st.markdown(f"- {SKILLS[k][0]}")
+        if not prof.strengths:
+            st.caption("Not enough evidence yet.")
+    with b:
+        st.markdown("**Weaknesses**")
+        for k in prof.weaknesses or []:
+            st.markdown(f"- {SKILLS[k][0]}")
+        if not prof.weaknesses:
+            st.caption("None identified yet.")
+    if prof.flag_counts:
+        st.markdown("**Recurring patterns**")
+        st.dataframe(
+            [
+                {"Pattern": FLAG_DESCRIPTIONS[k], "Sessions": n}
+                for k, n in sorted(prof.flag_counts.items(), key=lambda kv: -kv[1])
+            ],
+            hide_index=True,
+            width="stretch",
+        )
+
+    lib = library()
+    spec = next_scenario(prof, hist, sorted(lib))
+    st.subheader("Recommended next rehearsal")
+    case_title = lib[spec.case_id][0].title if spec.case_id in lib else "any case"
+    st.info(f"**{case_title}, tier {spec.tier}.** {spec.rationale}")
+    if st.button("Start this rehearsal →", type="primary"):
+        st.session_state["preset"] = spec
+        st.session_state.pop("session", None)
+        st.switch_page(PAGES["rehearse"])
+
+    if hist:
+        st.subheader("History")
+        rows = []
+        for s, c in hist:
+            f = extract_features(s, c)
+            rows.append(
+                {
+                    "When": f"{s.created_at:%b %d %H:%M}",
+                    "Kind": s.kind,
+                    "Case": c.title,
+                    "Tier": s.counterpart_profile.tier if s.counterpart_profile else None,
+                    "Result": s.status,
+                    "Points": f["points"],
+                    "Surplus share": None
+                    if f["surplus_share"] is None
+                    else round(f["surplus_share"], 2),
+                }
+            )
+        st.dataframe(rows, hide_index=True, width="stretch")
+
+
+def page_real() -> None:
+    st.title("Real negotiation")
+    p = _require_participant()
+    if p is None:
+        return
+    st.write(
+        "After a real negotiation (for example, the class simulation), log the outcome here. "
+        "It's compared with your rehearsals of the same case to see what the rehearsal got "
+        "right and wrong."
+    )
+    lib = library()
+    ids = sorted(lib)
+    case_id = st.selectbox("Case", ids, format_func=lambda c: lib[c][0].title, key="real_case")
+    case = lib[case_id][0]
+    role_id = st.radio(
+        "Your role",
+        [r.id for r in case.roles],
+        format_func=lambda r: case.role(r).name,
+        horizontal=True,
+        key="real_role",
+    )
+    with st.form("real"):
+        status = st.radio(
+            "Outcome",
+            ["agreed", "impasse"],
+            horizontal=True,
+            format_func=lambda s: "Deal" if s == "agreed" else "No deal",
+        )
+        st.markdown("Agreed terms (if there was a deal):")
+        picks = {}
+        cols = st.columns(min(3, len(case.issues)))
+        for n, issue in enumerate(case.issues):
+            picks[issue.id] = cols[n % len(cols)].selectbox(
+                issue.name, [o.label for o in issue.options], key=f"real_{issue.id}"
+            )
+        st.markdown("How did the other side behave? (0 = not at all, 1 = very)")
+        observed = {
+            d: st.slider(q, 0.0, 1.0, 0.5, 0.1, key=f"real_{d}") for d, q in DIAL_QUESTIONS.items()
+        }
+        notes = st.text_area("Notes or transcript (optional; no names, please)")
+        if st.form_submit_button("Save real outcome", type="primary"):
+            agreement = None
+            if status == "agreed":
+                agreement = Offer(
+                    terms={
+                        i.id: next(o.id for o in i.options if o.label == picks[i.id])
+                        for i in case.issues
+                    }
+                )
+            SessionStore().save(
+                Session(
+                    participant_id=p.id,
+                    case_id=case.id,
+                    user_role_id=role_id,
+                    counterpart_role_id=case.other_role(role_id).id,
+                    kind="real",
+                    status=status,
+                    agreement=agreement,
+                    notes=notes,
+                    observed_counterpart=observed,
+                )
+            )
+            st.success("Saved.")
+
+    _sim2real(p, case, role_id)
+
+
+def _sim2real(p: Participant, case: Case, role_id: str) -> None:
+    sessions = [
+        s
+        for s in SessionStore().for_participant(p.id)
+        if s.case_id == case.id and s.user_role_id == role_id and s.status in ("agreed", "impasse")
+    ]
+    rehearsals = [s for s in sessions if s.kind == "rehearsal"]
+    reals = [s for s in sessions if s.kind == "real"]
+    if not reals:
+        return
+    st.subheader("Rehearsal vs real")
+    real = reals[-1]
+    real_pts = outcome_summary(real, case).points
+    rows = [
+        {
+            "Session": f"Rehearsal {s.created_at:%b %d %H:%M}",
+            "Tier": s.counterpart_profile.tier if s.counterpart_profile else None,
+            "Result": s.status,
+            "Your points": outcome_summary(s, case).points,
+        }
+        for s in rehearsals
+    ]
+    rows.append({"Session": "Real", "Tier": None, "Result": real.status, "Your points": real_pts})
+    st.dataframe(rows, hide_index=True, width="stretch")
+    if not rehearsals:
+        st.caption("No rehearsals of this case and role yet to compare against.")
+        return
+    mean_pts = sum(r["Your points"] for r in rows[:-1]) / len(rehearsals)
+    share = surplus_share(case, role_id, real_pts) - surplus_share(case, role_id, mean_pts)
+    st.metric(
+        "Real outcome vs rehearsal average",
+        f"{real_pts:g} pts",
+        f"{real_pts - mean_pts:+.0f} pts ({share:+.0%} of your range)",
+    )
+    profiles: list[CounterpartProfile] = [
+        s.counterpart_profile for s in rehearsals if s.counterpart_profile
+    ]
+    if profiles and real.observed_counterpart:
+        st.markdown("**Counterpart behavior: rehearsal vs what you observed**")
+        st.dataframe(
+            [
+                {
+                    "Behavior": DIAL_QUESTIONS[d],
+                    "Rehearsal counterpart": round(
+                        sum(getattr(pr, d) for pr in profiles) / len(profiles), 2
+                    ),
+                    "Real counterpart (your rating)": real.observed_counterpart.get(d),
+                }
+                for d in DIALS
+            ],
+            hide_index=True,
+            width="stretch",
+        )
+        st.caption(
+            "Large gaps show where rehearsal didn't match reality (RQ2): for example, a real "
+            "counterpart that conceded far less than the rehearsal one."
+        )
+
+
+def page_cases() -> None:
+    st.title("Case library")
+    lib = library()
+    facilitator = st.session_state.get("facilitator", False)
+    for cid, (case, path) in sorted(lib.items()):
+        private = "private" in str(path)
+        with st.expander(f"{case.title} ({cid}){' · private' if private else ''}"):
+            st.write(case.public_brief)
+            for issue in case.issues:
+                st.markdown(f"- **{issue.name}**: " + ", ".join(o.label for o in issue.options))
+            st.caption(
+                "Roles: "
+                + ", ".join(r.name + (" (inferred)" if r.inferred else "") for r in case.roles)
+            )
+            if case.source:
+                st.caption(case.source)
+            if facilitator:
+                st.json(case.model_dump(), expanded=False)
+
+    st.subheader("Add a case")
+    st.caption(
+        "Imported cases are saved to data/cases/private/ (never committed). Review the point "
+        "tables before using a case in the study."
+    )
+    paste, upload = st.tabs(["Paste case text (uses Claude)", "Upload JSON"])
+    with paste:
+        if not online():
+            st.info("Parsing needs the API. Add a key in the sidebar or turn off offline mode.")
+        with st.form("parse"):
+            public = st.text_area("Public / general information", height=150)
+            c1, c2 = st.columns(2)
+            name1 = c1.text_input("Role 1 name", "Buyer")
+            sheet1 = c1.text_area("Role 1 confidential sheet", height=200)
+            name2 = c2.text_input("Role 2 name", "Seller")
+            sheet2 = c2.text_area(
+                "Role 2 confidential sheet (leave empty if you don't have it)", height=200
+            )
+            infer = st.checkbox("Estimate the missing sheet if only one is given", value=True)
+            go = st.form_submit_button("Parse case", type="primary", disabled=not online())
+        if go:
+            roles = {name1: sheet1} | ({name2: sheet2} if sheet2.strip() else {})
+            if not public.strip() or not sheet1.strip():
+                st.error("Need the public information and at least one confidential sheet.")
+            else:
+                with st.spinner("Parsing (this can take a minute)…"):
+                    try:
+                        parsed = parse_case(
+                            public,
+                            roles,
+                            llm("medium"),
+                            infer_missing=infer,
+                            source="Imported via the app.",
+                        )
+                        st.session_state["parsed_case"] = parsed
+                    except Exception as e:  # noqa: BLE001
+                        st.error(f"Parsing failed: {e}")
+        parsed: Case | None = st.session_state.get("parsed_case")
+        if parsed is not None:
+            st.success(f"Parsed **{parsed.title}** with {len(parsed.issues)} issues.")
+            for issue in parsed.issues:
+                st.markdown(f"- **{issue.name}**: " + ", ".join(o.label for o in issue.options))
+            st.caption(parsed.source)
+            show = st.checkbox(
+                "Show full JSON for review (reveals both confidential sheets, including any "
+                "estimated one: spoils the rehearsal for that role)"
+            )
+            text = parsed.model_dump_json(indent=2)
+            edited = st.text_area("Case JSON", text, height=400) if show else text
+            if st.button("Save case"):
+                try:
+                    case = Case.model_validate_json(edited)
+                    path = save_private_case(case)
+                    st.session_state.pop("parsed_case", None)
+                    st.success(f"Saved to {path}. It's now available in Rehearse.")
+                except ValueError as e:
+                    st.error(f"Invalid case: {e}")
+    with upload:
+        file = st.file_uploader("Case JSON", type="json")
+        if file is not None and st.button("Validate and save"):
+            try:
+                case = Case.model_validate_json(file.getvalue())
+                st.success(f"Saved to {save_private_case(case)}.")
+            except ValueError as e:
+                st.error(f"Invalid case: {e}")

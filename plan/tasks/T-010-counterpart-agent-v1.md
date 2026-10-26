@@ -23,3 +23,4 @@ A scaffold exists in src/negotrain/counterpart/agent.py: prompt-driven, structur
 
 ## Log
 - 2026-10-24: Scaffold landed with T-001.
+- 2026-10-25: MVP branch: after 3 invalid moves the agent makes a code counteroffer at its current minimum instead of raising (agent.fallbacks); per-turn private note states the minimum. Live sessions still to do.

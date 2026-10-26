@@ -21,5 +21,29 @@ def effort() -> str:
     return os.getenv("NEGOTRAIN_EFFORT", "medium")
 
 
+def chat_effort() -> str:
+    """Effort for counterpart turns in the app: low keeps a live conversation responsive."""
+    return os.getenv("NEGOTRAIN_CHAT_EFFORT", "low")
+
+
+def offline() -> bool:
+    """Run without the API: rule-based counterpart and template feedback."""
+    return os.getenv("NEGOTRAIN_OFFLINE", "").lower() in ("1", "true", "yes")
+
+
+def has_api_key() -> bool:
+    return bool(os.getenv("ANTHROPIC_API_KEY") or os.getenv("ANTHROPIC_AUTH_TOKEN"))
+
+
 def sessions_dir() -> Path:
     return Path(os.getenv("NEGOTRAIN_SESSIONS_DIR", REPO_ROOT / "data" / "sessions"))
+
+
+def participants_dir() -> Path:
+    return Path(os.getenv("NEGOTRAIN_PARTICIPANTS_DIR", REPO_ROOT / "data" / "participants"))
+
+
+def cases_dirs() -> list[Path]:
+    """Committed synthetic cases, then private (gitignored) ones, which is where imports go."""
+    root = Path(os.getenv("NEGOTRAIN_CASES_DIR", REPO_ROOT / "data" / "cases"))
+    return [root, root / "private"]

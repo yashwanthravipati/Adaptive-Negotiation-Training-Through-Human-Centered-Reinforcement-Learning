@@ -58,6 +58,10 @@ class RoleSheet(BaseModel):
     points: dict[str, dict[str, float]] = Field(description="issue_id -> option_id -> points")
     reservation_value: float = Field(description="Points from walking away (BATNA)")
     constraints: list[Constraint] = Field(default_factory=list)
+    inferred: bool = Field(
+        default=False,
+        description="Estimated by the parser because the real sheet was not provided",
+    )
 
 
 class Case(BaseModel):
@@ -148,6 +152,7 @@ class CounterpartProfile(BaseModel):
 
 
 SessionStatus = Literal["active", "agreed", "impasse", "abandoned"]
+SessionKind = Literal["rehearsal", "real"]
 
 
 class Session(BaseModel):
@@ -161,6 +166,15 @@ class Session(BaseModel):
     status: SessionStatus = "active"
     agreement: Offer | None = None
     created_at: datetime = Field(default_factory=_now)
+    kind: SessionKind = Field(
+        default="rehearsal",
+        description="rehearsal = vs the counterpart agent; real = a logged human negotiation",
+    )
+    notes: str = ""
+    observed_counterpart: dict[str, float] = Field(
+        default_factory=dict,
+        description="Real sessions: participant's ratings of the other side on the dials (0-1)",
+    )
 
     def latest_offer_from(self, speaker: Speaker) -> Offer | None:
         for turn in reversed(self.turns):
@@ -184,3 +198,19 @@ class Session(BaseModel):
                 raise ValueError("can only accept a complete offer from the other side")
             self.agreement = offer
             self.status = "agreed"
+
+
+# -------------------------------------------------------------------- participants
+
+
+class Participant(BaseModel):
+    """Onboarding record. Pseudonymous: the id is the only identifier we store."""
+
+    id: str
+    experience: Literal["none", "some", "lots"] = "some"
+    goals: str = ""
+    self_ratings: dict[str, int] = Field(
+        default_factory=dict, description="skill -> 1-5 self-assessment at onboarding"
+    )
+    consented: bool = False
+    created_at: datetime = Field(default_factory=_now)

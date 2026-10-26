@@ -1,10 +1,10 @@
 ---
 id: T-025
 title: Negotiator profile model
-status: todo
+status: in-progress
 milestone: M2
 workstream: profiling
-owner: unassigned
+owner: mahdi
 depends_on: [T-024]
 ---
 
@@ -15,8 +15,9 @@ Aggregate features across sessions into strengths and weaknesses, with uncertain
 For example, per-feature z-scores against a reference population (simulated users or pooled participants), shrunk toward the mean when there are few sessions.
 
 ## Acceptance criteria
-- [ ] Profile schema and update(profile, session)
-- [ ] Top weaknesses with confidence
-- [ ] Shown in the UI
+- [x] Profile schema and update(profile, session)
+- [x] Top weaknesses with confidence
+- [x] Shown in the UI
 
 ## Log
+- 2026-10-25: MVP branch: profile.py, six skills, shrinkage to 0.5 (prior weight 2), confidence n/(n+2); rebuilt from all sessions; My profile page.

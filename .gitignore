@@ -19,6 +19,7 @@ data/cases/private/*
 data/sessions/*
 !data/sessions/.gitkeep
 data/study/
+data/participants/
 results/**/raw/
 
 # OS / editors
