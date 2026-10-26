@@ -1,9 +1,10 @@
-"""Pages of the NegoTrain app (T-014, MVP of the five workflow stages). main.py wires them up.
+"""Pages of the NegoTrain app (MVP of the five workflow stages). main.py wires them up.
 
-Pages follow the proposal's workflow: onboarding (Start), personalization and practice
-(Rehearse, with the curriculum's recommended counterpart), coaching and feedback (Feedback,
-post-session only), strengths and weaknesses (My profile), and sim-to-real comparison (Real
-negotiation). Case library imports new cases with the parser.
+The app runs locally for one person, so there is no sign-in: sessions are stored under one
+implicit participant id. The first and only screen until a scenario exists is the upload
+page (page_setup): case files -> parsed case -> role -> "active scenario". Then Prepare
+(brief + training plan), Rehearse, Feedback (post-session only), My profile, and Real
+negotiation all work on that scenario; "New scenario" in the sidebar goes back to upload.
 
 Information hiding: the counterpart's sheet is never rendered before a session ends, and the
 counterpart agent never receives the user's sheet. Without an API key (or with
@@ -18,6 +19,7 @@ import random
 from html import escape
 
 import streamlit as st
+from pydantic import BaseModel
 
 from negotrain import config
 from negotrain.app import style
@@ -43,7 +45,7 @@ from negotrain.llm import ClaudeLLM, LLMRefusal
 from negotrain.prep import Prep, build_prep, prep_key
 from negotrain.profiling import FLAG_DESCRIPTIONS, SKILLS, build_profile, extract_features
 from negotrain.schemas import Case, CounterpartProfile, Offer, Participant, Session, Turn
-from negotrain.sessions import ParticipantStore, SessionStore
+from negotrain.sessions import SessionStore
 
 # Filled in by main.py so pages can link to each other with st.switch_page.
 PAGES: dict[str, st.Page] = {}
@@ -80,17 +82,46 @@ def online() -> bool:
     return config.has_api_key() and not st.session_state.get("offline", config.offline())
 
 
-def stores() -> tuple[SessionStore, ParticipantStore]:
-    return SessionStore(), ParticipantStore()
-
-
 def library() -> dict[str, tuple[Case, object]]:
     return case_library()
 
 
-def participant() -> Participant | None:
-    pid = st.session_state.get("pid")
-    return ParticipantStore().load(pid) if pid else None
+def participant() -> Participant:
+    """Local, single-user app: one implicit participant (NEGOTRAIN_PARTICIPANT, default
+    "local"). Sessions are still keyed by it so profiles and the study data work unchanged."""
+    return Participant(id=config.participant_id(), consented=True)
+
+
+class ActiveScenario(BaseModel):
+    """The case and role everything after the upload step works on (persisted locally)."""
+
+    case_id: str
+    role_id: str
+
+
+def active_scenario() -> tuple[Case, str] | None:
+    state = SessionStore().load_artifact("current", "state", ActiveScenario)
+    if state is None:
+        return None
+    lib = library()
+    if state.case_id not in lib:
+        return None
+    case = lib[state.case_id][0]
+    return (case, state.role_id) if state.role_id in [r.id for r in case.roles] else None
+
+
+def set_active_scenario(case_id: str, role_id: str) -> None:
+    SessionStore().save_artifact(
+        "current", "state", ActiveScenario(case_id=case_id, role_id=role_id)
+    )
+    for key in ("session", "case", "preset", "preset_role", "feedback_session"):
+        st.session_state.pop(key, None)
+
+
+def clear_active_scenario() -> None:
+    path = SessionStore().root / "state" / "current.json"
+    path.unlink(missing_ok=True)
+    st.session_state.pop("setup_case_id", None)
 
 
 def counterpart_factory(session: Session, case: Case, *, use_llm: bool, effort: str):
@@ -211,33 +242,21 @@ def outcome_metrics(session: Session, case: Case) -> None:
 
 def sidebar() -> None:
     style.inject()
-    # ?pid=... lets a facilitator hand each participant a direct link.
-    if "pid" not in st.session_state and st.query_params.get("pid"):
-        st.session_state["pid"] = st.query_params["pid"]
     style.brand()
     with st.sidebar:
-        p = participant()
-        if p:
-            mode = "Claude counterpart" if online() else "Offline practice mode"
-            style.user_badge(p.id, mode)
-            if st.button("Switch participant", width="stretch"):
-                for key in ("pid", "session", "case"):
-                    st.session_state.pop(key, None)
+        current = active_scenario()
+        if current:
+            case, role_id = current
+            style.scenario_badge(case.title, case.role(role_id).name)
+            if st.button("📂 New scenario", width="stretch"):
+                clear_active_scenario()
                 st.rerun()
-        with st.expander("⚙️ Settings", expanded=not config.has_api_key()):
+        with st.expander("⚙️ Settings"):
             _settings()
 
 
 def _settings() -> None:
-    if not config.has_api_key():
-        key = st.text_input(
-            "Anthropic API key",
-            type="password",
-            help="Kept in this server process only. Or put ANTHROPIC_API_KEY in .env.",
-        )
-        if key:
-            os.environ["ANTHROPIC_API_KEY"] = key.strip()
-            st.rerun()
+    _api_key_input()
     st.session_state.setdefault("offline", config.offline())
     st.toggle(
         "Offline mode (no API calls)",
@@ -266,107 +285,93 @@ def _settings() -> None:
 # --------------------------------------------------------------------------- pages
 
 
-def page_start() -> None:
+def _api_key_input() -> None:
+    if config.has_api_key():
+        return
+    key = st.text_input(
+        "Anthropic API key",
+        type="password",
+        help="Kept in this app's memory only. Or put ANTHROPIC_API_KEY in .env.",
+    )
+    if key:
+        os.environ["ANTHROPIC_API_KEY"] = key.strip()
+        st.rerun()
+
+
+def page_setup() -> None:
     style.hero(
         "Negotiation rehearsal studio",
-        "Walk into your next negotiation already practiced.",
-        "Upload your case, get a preparation brief, and rehearse against AI counterparts "
-        "that adapt to you. After each round, a debrief shows which moments mattered and "
-        "what to practice next. No hints during the negotiation: the skill stays yours.",
+        "Start with your case.",
+        "Upload everything you were given for the negotiation: general instructions, your "
+        "confidential role sheet, score tables. We'll turn it into a practice scenario with a "
+        "preparation brief, AI counterparts to rehearse against, and a debrief after each "
+        "round.",
     )
-    style.cards(
-        [
-            (
-                "📂",
-                "Prepare",
-                "Upload the case files. Get an overview, your priorities, "
-                "walk-away and target, and questions to ask.",
-            ),
-            (
-                "💬",
-                "Rehearse",
-                "Negotiate the same scenario against cooperative, realistic, "
-                "and tough counterparts.",
-            ),
-            (
-                "📊",
-                "Debrief",
-                "See the moments that mattered, estimated by replaying your "
-                "key decisions with alternatives.",
-            ),
-        ]
-    )
-    st.write("")
     left, right = st.columns([3, 2], gap="large")
-    with left:
-        st.markdown("#### How it works")
-        style.steps(
-            [
-                ("Sign in", "Enter your participant id and complete onboarding once."),
-                ("Prepare", "Upload your case files; get a prep brief and a training plan."),
-                ("Rehearse", "Negotiate against AI counterparts of different styles."),
-                ("Feedback", "Generate your debrief after each session."),
-                ("My profile", "Strengths, weaknesses, and what to practice next."),
-                ("Real negotiation", "Log the real outcome and compare with rehearsals."),
-            ]
+    with left, st.container(border=True):
+        st.markdown("#### 📂 Upload your case files")
+        if not online():
+            style.banner(
+                "Reading your files needs Claude. Paste an Anthropic API key below, or try a "
+                "saved case on the right (works offline).",
+                "info",
+            )
+            _api_key_input()
+        files = st.file_uploader(
+            "Case materials",
+            type=list(SUPPORTED),
+            accept_multiple_files=True,
+            help="PDF, Word, or text. Scanned PDFs without a text layer can't be read.",
         )
+        infer = st.checkbox(
+            "If the other side's instructions aren't included, estimate them", value=True
+        )
+        if st.button(
+            "Build scenario", type="primary", disabled=not files or not online(), width="stretch"
+        ):
+            _build_scenario(participant(), files, infer)
     with right, st.container(border=True):
-        st.markdown("#### Sign in")
-        _sign_in()
+        st.markdown("#### 📚 Or use a saved case")
+        lib = library()
+        ids = sorted(lib)
+        if ids:
+            chosen = st.selectbox("Case", ids, format_func=lambda c: lib[c][0].title)
+            if st.button("Use this case", width="stretch"):
+                st.session_state["setup_case_id"] = chosen
+        else:
+            st.caption("No saved cases yet.")
 
-
-def _sign_in() -> None:
-    pid = st.text_input(
-        "Participant id",
-        value=st.session_state.get("pid", ""),
-        placeholder="e.g. team3-alex",
-        help="A pseudonym or the id you were given. Don't use your real name.",
-    ).strip()
-    if not pid:
-        st.caption("New here? Pick any pseudonym; you'll do a one-minute onboarding.")
+    lib = library()
+    case_id = st.session_state.get("setup_case_id")
+    if case_id not in lib:
         return
-    if pid != st.session_state.get("pid"):
-        st.session_state["pid"] = pid
-        st.session_state.pop("session", None)
-    _, people = stores()
-    existing = people.load(pid)
-    if existing and existing.consented:
-        style.banner(f"Welcome back, {pid}. You're all set.", "good")
-        if st.button("Go to Prepare →", type="primary", width="stretch"):
-            go("prepare")
-        return
-
-    st.markdown("##### Onboarding")
-    with st.form("onboarding", border=False):
-        consent = st.checkbox(
-            "I agree to take part. I understand that my negotiation messages are sent to "
-            "Anthropic's Claude API to generate the counterpart and feedback, that my data "
-            "is stored under this pseudonymous id only, and that I should not type personal "
-            "information into the chat."
+    case = lib[case_id][0]
+    st.write("")
+    with st.container(border=True):
+        st.markdown(f"### {md(case.title)}")
+        st.caption(md(case.public_brief))
+        style.chips([(i.name, "gray") for i in case.issues])
+        role_ids = [r.id for r in case.roles]
+        provided = [r.id for r in case.roles if not r.inferred]
+        role_id = st.radio(
+            "Which role are you playing?",
+            role_ids,
+            index=role_ids.index(provided[0]) if len(provided) == 1 else 0,
+            format_func=lambda r: case.role(r).name,
+            horizontal=True,
+            key=f"setup_role_{case_id}",
         )
-        experience = st.radio(
-            "Negotiation experience", ["none", "some", "lots"], index=1, horizontal=True
-        )
-        goals = st.text_area("What do you want to get better at?")
-        st.markdown("Rate yourself (1 = weak, 5 = strong):")
-        ratings = {
-            key: st.slider(label, 1, 5, 3, key=f"self_{key}")
-            for key, (label, _, _) in SKILLS.items()
-        }
-        if st.form_submit_button("Save and continue", type="primary", width="stretch"):
-            if not consent:
-                st.error("Please confirm consent to continue.")
-            else:
-                people.save(
-                    Participant(
-                        id=pid,
-                        experience=experience,
-                        goals=goals,
-                        self_ratings=ratings,
-                        consented=True,
-                    )
-                )
-                st.rerun()
+        if case.role(role_id).inferred:
+            st.warning("This role's instructions were estimated, not uploaded. Is this your role?")
+        elif case.other_role(role_id).inferred:
+            st.caption(
+                "The other side's instructions weren't uploaded, so the AI counterpart plays an "
+                "estimated version of them. Each rehearsal varies its style to cover the range "
+                "of opponents you might meet."
+            )
+        if st.button("Start training →", type="primary", width="stretch"):
+            set_active_scenario(case.id, role_id)
+            st.rerun()
 
 
 TRAINING_PLAN = [
@@ -381,80 +386,26 @@ TRAINING_PLAN = [
 
 
 def page_prepare() -> None:
+    case, role_id = active_scenario()
+    p = participant()
     style.page_header(
         "Prepare",
-        "Upload everything you were given (general instructions, your confidential role "
-        "sheet, score tables). We'll build a practice scenario, write your preparation "
-        "brief, and set up rehearsals against different opponents.",
+        f"{case.title}: you are the {case.role(role_id).name}. Read your brief, then work "
+        "through the training plan below.",
         "Step 1 · Get ready",
     )
-    p = _require_participant()
-    if p is None:
-        return
-    upload, pick = st.tabs(["Upload case files", "Use a case from the library"])
-    with upload:
-        files = st.file_uploader(
-            "Case materials",
-            type=list(SUPPORTED),
-            accept_multiple_files=True,
-            help="PDF, Word, or text. Scanned PDFs without a text layer can't be read.",
-        )
-        infer = st.checkbox(
-            "If the other side's instructions aren't included, estimate them", value=True
-        )
-        if not online():
-            st.info(
-                "Building a scenario from files needs the Claude API (add a key in the sidebar)."
-            )
-        if st.button("Build scenario", type="primary", disabled=not files or not online()):
-            _build_scenario(p, files, infer)
-    with pick:
-        lib = library()
-        ids = sorted(lib)
-        if ids:
-            chosen = st.selectbox("Case", ids, format_func=lambda c: lib[c][0].title)
-            if st.button("Use this case"):
-                st.session_state["prep_case_id"] = chosen
-
-    lib = library()
-    case_id = st.session_state.get("prep_case_id")
-    if case_id not in lib:
-        return
-    case = lib[case_id][0]
-    st.divider()
-    st.markdown(f"## {md(case.title)}")
-    role_ids = [r.id for r in case.roles]
-    provided = [r.id for r in case.roles if not r.inferred]
-    role_id = st.radio(
-        "Which role are you playing?",
-        role_ids,
-        index=role_ids.index(provided[0]) if len(provided) == 1 else 0,
-        format_func=lambda r: case.role(r).name,
-        horizontal=True,
-        key=f"prep_role_{case_id}",
-    )
-    if case.role(role_id).inferred:
-        st.warning(
-            "This role's instructions were estimated, not uploaded. Did you pick the right role?"
-        )
-    elif case.other_role(role_id).inferred:
-        st.caption(
-            "The other side's instructions weren't uploaded, so the AI counterpart plays an "
-            "estimated version of them. Each rehearsal varies its style to cover the range of "
-            "opponents you might meet."
-        )
-
     store = SessionStore()
     key = prep_key(p.id, case.id, role_id)
     prep = store.load_artifact(key, "prep", Prep)
-    label = "Prepare my brief" if prep is None else "Regenerate brief"
-    if st.button(label, type="primary" if prep is None else "secondary"):
+    if prep is None:
         with st.spinner("Writing your preparation brief…"):
             prep = build_prep(case, role_id, llm() if online() else None)
             store.save_artifact(key, "prep", prep)
-    if prep is None:
-        return
     _render_prep(case, prep)
+    if st.button("↻ Regenerate brief"):
+        with st.spinner("Writing your preparation brief…"):
+            store.save_artifact(key, "prep", build_prep(case, role_id, llm() if online() else None))
+        st.rerun()
     _training_plan(p, case, role_id)
 
 
@@ -476,13 +427,13 @@ def _build_scenario(p: Participant, files: list, infer: bool) -> None:
                 documents,
                 llm("medium"),
                 infer_missing=infer,
-                source=f"Uploaded by participant {p.id}: {', '.join(documents)}.",
+                source=f"Uploaded: {', '.join(documents)}.",
             )
         except Exception as e:  # noqa: BLE001 - surface parse/API errors to the user
             st.error(f"Couldn't build a scenario from these files: {md(e)}")
             return
     save_private_case(case)
-    st.session_state["prep_case_id"] = case.id
+    st.session_state["setup_case_id"] = case.id
     st.success(f"Built **{md(case.title)}** with {len(case.issues)} issues.")
 
 
@@ -579,47 +530,18 @@ def _training_plan(p: Participant, case: Case, role_id: str) -> None:
                 go("rehearse")
 
 
-def _require_participant() -> Participant | None:
-    p = participant()
-    if p is None or not p.consented:
-        style.banner(
-            "Sign in first: enter your participant id and complete onboarding on the Start page.",
-            "info",
-        )
-        if st.button("Go to Start"):
-            go("start")
-        return None
-    return p
+def _require_participant() -> Participant:
+    return participant()
 
 
 def _setup_rehearsal(p: Participant) -> None:
-    lib = library()
-    if not lib:
-        st.error("No cases found. Add one in the Case library.")
-        return
+    case, role_id = active_scenario()
     st.subheader("Set up a rehearsal")
-    st.caption("Tip: the Prepare page sets up a full training plan for a case.")
+    st.caption("Tip: the training plan on the Prepare page starts rehearsals in one click.")
     hist = history(p.id)
     profile = build_profile(p.id, hist)
-    spec = next_scenario(profile, hist, sorted(lib))
+    spec = next_scenario(profile, hist, [case.id])
     preset: ScenarioSpec | None = st.session_state.get("preset")
-
-    ids = sorted(lib)
-    default_case = (preset or spec).case_id if (preset or spec).case_id in lib else ids[0]
-    case_id = st.selectbox(
-        "Case", ids, index=ids.index(default_case), format_func=lambda c: lib[c][0].title
-    )
-    case = lib[case_id][0]
-    st.caption(md(case.public_brief))
-    role_ids = [r.id for r in case.roles]
-    preset_role = st.session_state.get("preset_role")
-    role_id = st.radio(
-        "Your role",
-        role_ids,
-        index=role_ids.index(preset_role) if preset_role in role_ids else 0,
-        format_func=lambda r: case.role(r).name,
-        horizontal=True,
-    )
     mode = st.radio(
         "Counterpart",
         ["Recommended for me", "I'll choose the difficulty"],
@@ -765,11 +687,10 @@ def page_rehearse() -> None:
         "Step 2 · Practice",
     )
     p = _require_participant()
-    if p is None:
-        return
     session: Session | None = st.session_state.get("session")
     case: Case | None = st.session_state.get("case")
-    if session is None or case is None or session.participant_id != p.id:
+    current, _ = active_scenario()
+    if session is None or case is None or session.case_id != current.id:
         _setup_rehearsal(p)
         return
 
@@ -868,8 +789,6 @@ def page_feedback() -> None:
         "Step 3 · Debrief",
     )
     p = _require_participant()
-    if p is None:
-        return
     store = SessionStore()
     lib = library()
     done = [
@@ -1070,8 +989,6 @@ def _render_counterfactuals(
 def page_profile() -> None:
     style.page_header("My profile", "Strengths, weaknesses, and what to practice next.", "Progress")
     p = _require_participant()
-    if p is None:
-        return
     hist = history(p.id)
     prof = build_profile(p.id, hist)
     st.caption(
@@ -1080,8 +997,6 @@ def page_profile() -> None:
     )
     for s in prof.skills:
         label = f"{s.label}: {s.score:.2f}  ·  confidence {s.confidence:.0%}"
-        if s.skill in p.self_ratings:
-            label += f"  ·  self-rating {p.self_ratings[s.skill]}/5"
         st.progress(min(1.0, max(0.0, s.score)), text=label)
         st.caption(s.description)
     a, b = st.columns(2)
@@ -1109,7 +1024,8 @@ def page_profile() -> None:
         )
 
     lib = library()
-    spec = next_scenario(prof, hist, sorted(lib))
+    current, _ = active_scenario()
+    spec = next_scenario(prof, hist, [current.id])
     st.subheader("Recommended next rehearsal")
     case_title = lib[spec.case_id][0].title if spec.case_id in lib else "any case"
     st.info(f"**{md(case_title)}, tier {spec.tier}.** {md(spec.rationale)}")
@@ -1148,19 +1064,8 @@ def page_real() -> None:
         "Progress",
     )
     p = _require_participant()
-    if p is None:
-        return
-    lib = library()
-    ids = sorted(lib)
-    case_id = st.selectbox("Case", ids, format_func=lambda c: lib[c][0].title, key="real_case")
-    case = lib[case_id][0]
-    role_id = st.radio(
-        "Your role",
-        [r.id for r in case.roles],
-        format_func=lambda r: case.role(r).name,
-        horizontal=True,
-        key="real_role",
-    )
+    case, role_id = active_scenario()
+    style.chips([(case.title, ""), (f"You: {case.role(role_id).name}", "gray")])
     with st.form("real"):
         status = st.radio(
             "Outcome",

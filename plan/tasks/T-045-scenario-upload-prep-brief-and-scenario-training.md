@@ -24,3 +24,4 @@ Requested 2026-10-25 for the class simulation. Builds on the parser (T-004), cur
 
 ## Log
 - 2026-10-25: Built on branch MVP: cases/documents.py, parser.parse_documents, prep.py, Prepare page in app/views.py. 59 offline tests pass. Not yet run against the API (no key in the dev environment).
+- 2026-10-25: Flow simplified per user: no sign-in/onboarding (local single user, config.participant_id); upload page is the only screen until a scenario (case+role) is active; then Prepare (auto brief + plan), Rehearse, Feedback, My profile, Real negotiation work on it. 59 tests pass.

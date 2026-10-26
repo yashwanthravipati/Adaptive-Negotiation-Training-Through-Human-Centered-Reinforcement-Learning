@@ -217,5 +217,8 @@ def brand() -> None:
     st.logo(str(ASSETS / "logo.svg"), size="large", icon_image=str(ASSETS / "icon.svg"))
 
 
-def user_badge(pid: str, detail: str) -> None:
-    _html(f'<div class="nt-user">Signed in as<br><b>{escape(pid)}</b><br>{escape(detail)}</div>')
+def scenario_badge(title: str, role: str) -> None:
+    _html(
+        f'<div class="nt-user">Current scenario<br><b>{escape(title)}</b><br>'
+        f"You: {escape(role)}</div>"
+    )

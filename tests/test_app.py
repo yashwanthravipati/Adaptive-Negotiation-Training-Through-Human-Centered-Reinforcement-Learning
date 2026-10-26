@@ -6,8 +6,7 @@ import pytest
 from streamlit.testing.v1 import AppTest
 
 from negotrain.cases import load_case
-from negotrain.schemas import Participant
-from negotrain.sessions import ParticipantStore, SessionStore
+from negotrain.sessions import SessionStore
 
 MAIN = Path(__file__).resolve().parents[1] / "src" / "negotrain" / "app" / "main.py"
 CASE = Path(__file__).resolve().parents[1] / "data" / "cases" / "cloudline_hiring.json"
@@ -21,11 +20,8 @@ def page_script(name: str) -> None:
     getattr(views, name)()
 
 
-def page(name: str, pid: str | None = "p1") -> AppTest:
-    at = AppTest.from_function(page_script, args=(name,), default_timeout=30)
-    if pid:
-        at.session_state["pid"] = pid
-    return at.run()
+def page(name: str) -> AppTest:
+    return AppTest.from_function(page_script, args=(name,), default_timeout=30).run()
 
 
 def visible_text(at: AppTest) -> str:
@@ -42,26 +38,37 @@ def offline(tmp_path, monkeypatch):
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     monkeypatch.delenv("ANTHROPIC_AUTH_TOKEN", raising=False)
     monkeypatch.setenv("NEGOTRAIN_SESSIONS_DIR", str(tmp_path / "sessions"))
-    monkeypatch.setenv("NEGOTRAIN_PARTICIPANTS_DIR", str(tmp_path / "participants"))
 
 
 @pytest.fixture
-def onboarded():
-    ParticipantStore().save(Participant(id="p1", consented=True))
+def scenario():
+    """An active scenario: the candidate role in the committed sample case."""
+    from negotrain.app.views import ActiveScenario
+
+    SessionStore().save_artifact(
+        "current", "state", ActiveScenario(case_id="cloudline_hiring", role_id="candidate")
+    )
 
 
-def test_main_app_starts_and_onboards():
+def test_app_opens_on_upload_and_unlocks_after_choosing_a_scenario():
     at = AppTest.from_file(str(MAIN), default_timeout=30).run()
     assert not at.exception
-    next(t for t in at.text_input if t.label == "Participant id").input("p9").run()
-    consent = next(c for c in at.checkbox if c.label.startswith("I agree"))
-    consent.check()
-    button(at, "Save and continue").click().run()
+    assert "Start with your case." in visible_text(at)
+    assert not [b for b in at.button if b.label == "📂 New scenario"]  # nothing unlocked yet
+
+    button(at, "Use this case").click().run()
+    button(at, "Start training →").click().run()
     assert not at.exception
-    assert ParticipantStore().load("p9").consented
+    # Now on Prepare (the default page once a scenario is active), with the brief written.
+    text = visible_text(at)
+    assert "Prepare" in text and "Checklist" in text
+    assert load_case(CASE).role("recruiter").confidential_brief not in text
+
+    button(at, "📂 New scenario").click().run()
+    assert "Start with your case." in visible_text(at)
 
 
-def test_rehearsal_flow_hides_counterpart_sheet_until_the_end(onboarded):
+def test_rehearsal_flow_hides_counterpart_sheet_until_the_end(scenario):
     case = load_case(CASE)
     secret = case.role("recruiter").confidential_brief
     at = page("page_rehearse")
@@ -92,7 +99,7 @@ def test_rehearsal_flow_hides_counterpart_sheet_until_the_end(onboarded):
     assert secret in visible_text(at)  # revealed in the debrief
 
 
-def test_feedback_profile_real_and_cases_pages(onboarded):
+def test_feedback_profile_real_and_cases_pages(scenario):
     at = page("page_rehearse")
     button(at, "Start rehearsal").click().run()
     next(c for c in at.checkbox if c.label == "I'm sure I want to walk away").check().run()
@@ -106,7 +113,7 @@ def test_feedback_profile_real_and_cases_pages(onboarded):
     sid = at.session_state["session"].id
     assert (Path(SessionStore().root) / "feedback" / f"{sid}.json").exists()
 
-    for name in ("page_profile", "page_cases", "page_start"):
+    for name in ("page_profile", "page_cases", "page_setup"):
         assert not page(name).exception, name
 
     real = page("page_real")
@@ -116,17 +123,8 @@ def test_feedback_profile_real_and_cases_pages(onboarded):
     assert "Rehearsal vs real" in " ".join(str(h.value) for h in real.subheader)
 
 
-def test_pages_ask_for_onboarding_first():
-    at = page("page_rehearse", pid=None)
-    assert not at.exception
-    assert "onboarding" in visible_text(at)
-
-
-def test_prepare_from_library_builds_brief_and_starts_training(onboarded):
+def test_prepare_writes_brief_and_training_plan_starts_rehearsals(scenario):
     at = page("page_prepare")
-    assert not at.exception
-    button(at, "Use this case").click().run()
-    button(at, "Prepare my brief").click().run()
     assert not at.exception
     text = visible_text(at)
     assert "Checklist" in text and "Training plan" in " ".join(str(h.value) for h in at.subheader)
@@ -138,7 +136,7 @@ def test_prepare_from_library_builds_brief_and_starts_training(onboarded):
     assert session.case_id == case.id and session.counterpart_profile.tier == 2
 
 
-def test_prepare_upload_builds_a_scenario(onboarded, tmp_path, monkeypatch):
+def test_upload_builds_a_scenario(tmp_path, monkeypatch):
     import shutil
 
     from negotrain.app import views
@@ -157,7 +155,7 @@ def test_prepare_upload_builds_a_scenario(onboarded, tmp_path, monkeypatch):
     monkeypatch.setattr(views, "_total_calls", lambda: 0)
     monkeypatch.setattr(views, "_total_cost", lambda: 0.0)
 
-    at = page("page_prepare")
+    at = page("page_setup")
     at.file_uploader[0].set_value(
         [
             ("general.txt", b"Public info about the hiring.", "text/plain"),
@@ -171,9 +169,11 @@ def test_prepare_upload_builds_a_scenario(onboarded, tmp_path, monkeypatch):
     assert (cases / "private" / "uploaded_case.json").exists()
     assert "general.txt" in scripted.calls[0][1][0]["content"]
     assert any("scan.pdf" in str(w.value) for w in at.warning)  # unreadable file reported
-    assert at.session_state["prep_case_id"] == "uploaded_case"
+    assert at.session_state["setup_case_id"] == "uploaded_case"
     # The uploaded sheet's role is preselected; the other side is marked as estimated.
     assert "estimated version" in visible_text(at)
+    button(at, "Start training →").click().run()
+    assert views.active_scenario()[0].id == "uploaded_case"
 
 
 def test_dollar_amounts_are_escaped_for_markdown():

@@ -2,8 +2,10 @@
 
     streamlit run src/negotrain/app/main.py
 
-Set ANTHROPIC_API_KEY in .env (or paste it in the sidebar) for the Claude counterpart;
-without one, or with NEGOTRAIN_OFFLINE=1, the app runs on the rule-based counterpart.
+Runs locally for one person. The first screen asks for the case files; the other pages
+unlock once a scenario (case + role) is chosen. Set ANTHROPIC_API_KEY in .env (or paste it
+on the first screen) for Claude; without one, or with NEGOTRAIN_OFFLINE=1, the app runs on
+the rule-based counterpart.
 """
 
 from __future__ import annotations
@@ -14,24 +16,34 @@ st.set_page_config(page_title="NegoTrain", page_icon="🤝", layout="wide")
 
 from negotrain.app import views  # noqa: E402
 
-views.PAGES.update(
-    {
-        "start": st.Page(views.page_start, title="Home", icon="🏠", default=True),
-        "prepare": st.Page(views.page_prepare, title="Prepare", icon="📂", url_path="prepare"),
-        "rehearse": st.Page(views.page_rehearse, title="Rehearse", icon="💬", url_path="rehearse"),
-        "feedback": st.Page(views.page_feedback, title="Feedback", icon="📊", url_path="feedback"),
-        "profile": st.Page(views.page_profile, title="My profile", icon="🧭", url_path="profile"),
-        "real": st.Page(views.page_real, title="Real negotiation", icon="🤝", url_path="real"),
-        "cases": st.Page(views.page_cases, title="Case library", icon="📚", url_path="cases"),
-    }
-)
 views.sidebar()
-pages = views.PAGES
-st.navigation(
-    {
-        "Get ready": [pages["start"], pages["prepare"]],
-        "Practice": [pages["rehearse"], pages["feedback"]],
-        "Progress": [pages["profile"], pages["real"]],
-        "Facilitator": [pages["cases"]],
-    }
-).run()
+views.PAGES.clear()
+if views.active_scenario() is None:
+    # Nothing is unlocked until there is a scenario: the upload step is the whole app.
+    views.PAGES["setup"] = st.Page(views.page_setup, title="Upload case", icon="📂", default=True)
+    st.navigation([views.PAGES["setup"]], position="hidden").run()
+else:
+    views.PAGES.update(
+        {
+            "prepare": st.Page(views.page_prepare, title="Prepare", icon="📋", default=True),
+            "rehearse": st.Page(
+                views.page_rehearse, title="Rehearse", icon="💬", url_path="rehearse"
+            ),
+            "feedback": st.Page(
+                views.page_feedback, title="Feedback", icon="📊", url_path="feedback"
+            ),
+            "profile": st.Page(
+                views.page_profile, title="My profile", icon="🧭", url_path="profile"
+            ),
+            "real": st.Page(views.page_real, title="Real negotiation", icon="🤝", url_path="real"),
+            "cases": st.Page(views.page_cases, title="Case library", icon="📚", url_path="cases"),
+        }
+    )
+    pages = views.PAGES
+    st.navigation(
+        {
+            "Practice": [pages["prepare"], pages["rehearse"], pages["feedback"]],
+            "Progress": [pages["profile"], pages["real"]],
+            "More": [pages["cases"]],
+        }
+    ).run()

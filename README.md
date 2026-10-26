@@ -40,32 +40,32 @@ sidebar) the counterpart, feedback, and case parser use Claude. Without a key, o
 `NEGOTRAIN_OFFLINE=1`, it runs on a rule-based counterpart and template feedback, which is
 handy for demos and UI work.
 
-Typical flow for a class simulation:
+The app runs locally for one person (no sign-in). Typical flow for a class simulation:
 
-1. **Start**: enter a pseudonymous participant id and complete onboarding once.
-2. **Prepare**: upload all your case files (PDF, Word, text). Claude works out which file
-   is which, builds a scorable scenario (estimating the other side's instructions if you
-   don't have them; saved to `data/cases/private/`, gitignored), and writes a prep brief
-   from your side only: overview, walk-away and target, what's at stake per issue,
-   hypotheses about the other side, questions to ask, opening plan, pitfalls, checklist.
-   A training plan then starts rehearsals on that scenario against warm-up, realistic,
-   tough, and profile-recommended counterparts. (The Case library page also takes pasted
-   text or case JSON.)
-3. **Rehearse**: pick the case and your role. The counterpart is recommended from your
-   profile (or choose a tier 1-5); each rehearsal samples a slightly different opponent.
-   Chat, attach formal offers with the per-issue builder, accept, or walk away. No hints
-   during the negotiation.
-4. **Feedback**: after the session, generate the debrief: outcome vs walk-away and vs the
-   best joint deal, a coaching report, and "moments that mattered" estimated by replaying
-   your key decisions with alternatives (counterfactual rollouts). Both sheets are revealed.
+1. **Upload your case** (the first screen; nothing else is unlocked until this is done):
+   drop in all your case files (PDF, Word, text). Claude works out which file is which and
+   builds a scorable scenario, estimating the other side's instructions if you don't have
+   them (saved to `data/cases/private/`, gitignored). Pick your role and start training.
+   Offline, or to reuse a case, pick a saved case instead.
+2. **Prepare**: your prep brief from your side only (overview, walk-away and target,
+   what's at stake per issue, hypotheses about the other side, questions, opening plan,
+   pitfalls, checklist) and a training plan: warm-up, realistic, tough, and
+   profile-recommended counterparts on this exact scenario.
+3. **Rehearse**: chat, attach formal offers with the per-issue builder, accept, or walk
+   away. No hints during the negotiation.
+4. **Feedback**: after each session: outcome vs walk-away and vs the best joint deal, a
+   coaching report, and "moments that mattered" from counterfactual rollouts. Both sheets
+   are revealed.
 5. **My profile**: skill scores with confidence, recurring error patterns, and the
    recommended next rehearsal.
 6. **Real negotiation**: after the real simulation, log the outcome and how the other side
-   behaved; the page compares it with your rehearsals (sim-to-real gap).
+   behaved, compared with your rehearsals (sim-to-real gap).
+
+"New scenario" in the sidebar goes back to step 1.
 
 Feedback with the Claude counterpart makes up to ~37 API calls per session at the default
 settings; the page shows an estimate before running (not yet measured live), and the free
-rule-based simulator is the alternative. Data lands in `data/sessions/` and `data/participants/` (both gitignored).
+rule-based simulator is the alternative. Data lands in `data/sessions/` (gitignored).
 
 ## Terminal
 

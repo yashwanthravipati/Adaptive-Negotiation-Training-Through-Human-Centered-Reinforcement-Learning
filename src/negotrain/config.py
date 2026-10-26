@@ -35,6 +35,11 @@ def has_api_key() -> bool:
     return bool(os.getenv("ANTHROPIC_API_KEY") or os.getenv("ANTHROPIC_AUTH_TOKEN"))
 
 
+def participant_id() -> str:
+    """The app runs locally for one person; their sessions are stored under this id."""
+    return os.getenv("NEGOTRAIN_PARTICIPANT", "local")
+
+
 def sessions_dir() -> Path:
     return Path(os.getenv("NEGOTRAIN_SESSIONS_DIR", REPO_ROOT / "data" / "sessions"))
 

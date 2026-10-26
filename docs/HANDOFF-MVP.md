@@ -51,10 +51,13 @@ sidebar); `app/style.py` adds CSS and small HTML components (hero, page headers,
 chips, offer cards, stat cards, point pills) and `md()`, which escapes `$` so dollar
 amounts don't render as LaTeX. **Use `md()` for any case or chat text passed to
 `st.markdown`/`st.write`/`st.caption`.** Navigation is grouped (Get ready / Practice /
-Progress / Facilitator). `?pid=<id>` in the URL signs a participant in.
+Progress / More).
 
-App pages: Home/Start (onboarding and consent), Prepare (upload files → scenario, prep brief,
-training plan; T-045), Rehearse, Feedback, My profile, Real
+**Flow (simplified 2026-10-25 at the user's request):** no sign-in or onboarding; the app
+is local and single-user (`config.participant_id()`, default `local`). The first screen is
+the upload page (`page_setup`); the navigation is hidden until an *active scenario* (case +
+role, stored at `data/sessions/state/current.json`) exists. Then the pages are Prepare
+(brief auto-generated + training plan; T-045), Rehearse, Feedback, My profile, Real
 negotiation, Case library. Sidebar: participant, API key, offline toggle, facilitator mode
 (shows full case JSON), and an "enforce concession schedule" toggle.
 
