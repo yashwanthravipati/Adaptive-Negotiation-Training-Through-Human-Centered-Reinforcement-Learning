@@ -1,0 +1,35 @@
+# NegoTrain app theme and client settings (read by `streamlit run` from the repo root).
+
+[client]
+toolbarMode = "minimal"
+
+[browser]
+gatherUsageStats = false
+
+[theme]
+base = "light"
+font = "Inter:https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap, sans-serif"
+headingFont = "Inter:https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap, sans-serif"
+headingFontWeights = [700, 650, 600]
+primaryColor = "#4F46E5"
+backgroundColor = "#F7F8FC"
+secondaryBackgroundColor = "#EEF0FA"
+textColor = "#111827"
+linkColor = "#4F46E5"
+borderColor = "#E3E6F0"
+showWidgetBorder = true
+baseRadius = "0.7rem"
+buttonRadius = "0.6rem"
+metricValueFontWeight = 650
+dataframeHeaderBackgroundColor = "#EEF0FA"
+greenColor = "#059669"
+redColor = "#DC2626"
+blueColor = "#4F46E5"
+chartCategoricalColors = ["#4F46E5", "#10B981", "#F59E0B", "#EF4444", "#0EA5E9", "#8B5CF6"]
+
+[theme.sidebar]
+backgroundColor = "#14162B"
+secondaryBackgroundColor = "#1F2240"
+textColor = "#E5E7F5"
+borderColor = "#2C3058"
+primaryColor = "#A5B4FC"

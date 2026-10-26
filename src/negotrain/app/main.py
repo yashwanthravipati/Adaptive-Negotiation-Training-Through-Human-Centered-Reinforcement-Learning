@@ -16,9 +16,7 @@ from negotrain.app import views  # noqa: E402
 
 views.PAGES.update(
     {
-        "start": st.Page(
-            views.page_start, title="Start", icon="👋", url_path="start", default=True
-        ),
+        "start": st.Page(views.page_start, title="Home", icon="🏠", default=True),
         "prepare": st.Page(views.page_prepare, title="Prepare", icon="📂", url_path="prepare"),
         "rehearse": st.Page(views.page_rehearse, title="Rehearse", icon="💬", url_path="rehearse"),
         "feedback": st.Page(views.page_feedback, title="Feedback", icon="📊", url_path="feedback"),
@@ -28,4 +26,12 @@ views.PAGES.update(
     }
 )
 views.sidebar()
-st.navigation(list(views.PAGES.values())).run()
+pages = views.PAGES
+st.navigation(
+    {
+        "Get ready": [pages["start"], pages["prepare"]],
+        "Practice": [pages["rehearse"], pages["feedback"]],
+        "Progress": [pages["profile"], pages["real"]],
+        "Facilitator": [pages["cases"]],
+    }
+).run()

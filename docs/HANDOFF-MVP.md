@@ -46,7 +46,14 @@ pytest                              # 50 offline tests
 | Prep brief (code numbers + LLM prose, template fallback, own sheet only) and the `Prep` artifact in `data/sessions/prep/` | `prep.py` | T-045 |
 | Usage cost tracking, thread-safe | `llm.py` (`Usage.cost`, `PRICE_PER_MTOK`) | — |
 
-App pages: Start (onboarding and consent), Prepare (upload files → scenario, prep brief,
+Look and feel: the theme is in `.streamlit/config.toml` (Inter font, indigo primary, dark
+sidebar); `app/style.py` adds CSS and small HTML components (hero, page headers, cards,
+chips, offer cards, stat cards, point pills) and `md()`, which escapes `$` so dollar
+amounts don't render as LaTeX. **Use `md()` for any case or chat text passed to
+`st.markdown`/`st.write`/`st.caption`.** Navigation is grouped (Get ready / Practice /
+Progress / Facilitator). `?pid=<id>` in the URL signs a participant in.
+
+App pages: Home/Start (onboarding and consent), Prepare (upload files → scenario, prep brief,
 training plan; T-045), Rehearse, Feedback, My profile, Real
 negotiation, Case library. Sidebar: participant, API key, offline toggle, facilitator mode
 (shows full case JSON), and an "enforce concession schedule" toggle.

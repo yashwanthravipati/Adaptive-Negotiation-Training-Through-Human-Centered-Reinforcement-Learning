@@ -174,3 +174,9 @@ def test_prepare_upload_builds_a_scenario(onboarded, tmp_path, monkeypatch):
     assert at.session_state["prep_case_id"] == "uploaded_case"
     # The uploaded sheet's role is preselected; the other side is marked as estimated.
     assert "estimated version" in visible_text(at)
+
+
+def test_dollar_amounts_are_escaped_for_markdown():
+    from negotrain.app.style import md
+
+    assert md("$120,000 or $150,000") == "\\$120,000 or \\$150,000"

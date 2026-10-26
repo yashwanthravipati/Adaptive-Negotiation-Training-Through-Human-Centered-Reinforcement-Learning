@@ -22,3 +22,4 @@ Put it in src/negotrain/app/. Offers come from a per-issue dropdown builder so t
 
 ## Log
 - 2026-10-25: MVP branch: src/negotrain/app (main.py + views.py): Start/onboarding, Rehearse (offer builder, accept, walk away), Feedback, My profile, Real negotiation, Case library. Offline mode via NEGOTRAIN_OFFLINE or no key. AppTest smoke tests incl. info hiding. Not yet tried live with Claude.
+- 2026-10-25: UI polish: theme (.streamlit/config.toml), app/style.py components, grouped navigation, logo, chat bubbles with offer cards, stat cards, point pills, two-column offer builder; fixed $ amounts rendering as LaTeX (style.md). Checked visually in a browser (offline mode).
