@@ -41,7 +41,7 @@ from negotrain.feedback import (
     estimate_calls,
     outcome_summary,
 )
-from negotrain.llm import ClaudeLLM, LLMRefusal
+from negotrain.llm import ClaudeLLM, LLMRefusal, check_api_key
 from negotrain.prep import Prep, build_prep, prep_key
 from negotrain.profiling import FLAG_DESCRIPTIONS, SKILLS, build_profile, extract_features
 from negotrain.schemas import Case, CounterpartProfile, Offer, Participant, Session, Turn
@@ -290,16 +290,46 @@ def _settings() -> None:
 # --------------------------------------------------------------------------- pages
 
 
-def _api_key_input() -> None:
-    if config.has_api_key():
+def _apply_key(widget_key: str) -> None:
+    """on_change callback: validate the pasted key, use it for this app process, and clear
+    the field (callbacks run before widgets render, so the field can be reset here)."""
+    key = st.session_state.get(widget_key, "").strip()
+    st.session_state[widget_key] = ""
+    if not key:
         return
-    key = st.text_input(
-        "Anthropic API key",
+    problem = check_api_key(key)
+    if problem:
+        st.session_state["api_key_error"] = f"Key not saved: {problem}."
+        return
+    os.environ["ANTHROPIC_API_KEY"] = key
+    st.session_state.pop("api_key_error", None)
+    st.session_state["offline"] = False
+    st.session_state["api_key_ok"] = True
+
+
+def _api_key_input(where: str = "settings") -> None:
+    """Enter, replace, or remove the API key. Kept in this process's environment only
+    (never written to disk); a key from .env can be replaced the same way."""
+    current = os.getenv("ANTHROPIC_API_KEY", "")
+    widget_key = f"api_key_{where}"
+    if current:
+        st.caption(f"API key in use: …{current[-4:]}")
+    st.text_input(
+        "Replace API key" if current else "Anthropic API key",
         type="password",
-        help="Kept in this app's memory only. Or put ANTHROPIC_API_KEY in .env.",
+        key=widget_key,
+        placeholder="sk-ant-…",
+        on_change=_apply_key,
+        args=(widget_key,),
+        help="Press Enter to apply. Checked against the API (free), kept in memory only. "
+        "To make it permanent, put ANTHROPIC_API_KEY in .env.",
     )
-    if key:
-        os.environ["ANTHROPIC_API_KEY"] = key.strip()
+    if error := st.session_state.get("api_key_error"):
+        st.error(error)
+    elif st.session_state.pop("api_key_ok", False):
+        st.success("Key works and is now in use.")
+    if current and st.button("Remove key", key=f"remove_key_{where}"):
+        os.environ.pop("ANTHROPIC_API_KEY", None)
         st.rerun()
 
 
@@ -321,7 +351,7 @@ def page_setup() -> None:
                 "saved case on the right (works offline).",
                 "info",
             )
-            _api_key_input()
+            _api_key_input("setup")
         files = st.file_uploader(
             "Case materials",
             type=list(UPLOAD_TYPES),

@@ -136,6 +136,22 @@ class ClaudeLLM:
         return response.parsed_output
 
 
+def check_api_key(api_key: str) -> str | None:
+    """None if ``api_key`` authenticates, else a short reason. Lists one model, which bills
+    no tokens, so the app can validate a pasted key immediately."""
+    try:
+        anthropic.Anthropic(api_key=api_key, max_retries=0).models.list(limit=1)
+    except anthropic.AuthenticationError:
+        return "that key was rejected (check for a typo or a revoked key)"
+    except anthropic.PermissionDeniedError:
+        return "that key doesn't have permission to use the API"
+    except anthropic.APIConnectionError:
+        return "couldn't reach the Anthropic API (are you offline?)"
+    except anthropic.APIStatusError as e:
+        return f"the API returned an error ({e.status_code})"
+    return None
+
+
 Responder = Callable[[str, Sequence[Message]], Any]
 
 
