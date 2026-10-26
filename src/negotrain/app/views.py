@@ -41,7 +41,7 @@ from negotrain.feedback import (
     estimate_calls,
     outcome_summary,
 )
-from negotrain.llm import ClaudeLLM, LLMRefusal
+from negotrain.llm import ClaudeCodeLLM, ClaudeLLM, LLMRefusal, check_api_key
 from negotrain.prep import Prep, build_prep, prep_key
 from negotrain.profiling import FLAG_DESCRIPTIONS, SKILLS, build_profile, extract_features
 from negotrain.schemas import Case, CounterpartProfile, Offer, Participant, Session, Turn
@@ -69,17 +69,48 @@ def _key_fingerprint() -> str:
     return hashlib.sha256(key.encode()).hexdigest()[:8]
 
 
+BACKENDS = {
+    "claude-code": "Claude Code (your plan, no API key)",
+    "api": "Anthropic API key",
+    "offline": "Offline (no AI)",
+}
+
+
+def default_backend() -> str:
+    choice = config.backend()
+    if config.offline():
+        return "offline"
+    if choice in BACKENDS:
+        return choice
+    if config.claude_bin():
+        return "claude-code"
+    return "api" if config.has_api_key() else "offline"
+
+
+def backend() -> str:
+    """The backend in use: the Settings choice, falling back to offline when its
+    prerequisite (the CLI or a key) is missing."""
+    choice = st.session_state.get("backend") or default_backend()
+    if choice == "claude-code" and not config.claude_bin():
+        return "offline"
+    if choice == "api" and not config.has_api_key():
+        return "offline"
+    return choice
+
+
 @st.cache_resource
-def _llm(effort: str, fingerprint: str) -> ClaudeLLM:
+def _llm(kind: str, effort: str, fingerprint: str) -> ClaudeLLM | ClaudeCodeLLM:
+    if kind == "claude-code":
+        return ClaudeCodeLLM(effort=effort)
     return ClaudeLLM(effort=effort)
 
 
-def llm(effort: str | None = None) -> ClaudeLLM:
-    return _llm(effort or config.effort(), _key_fingerprint())
+def llm(effort: str | None = None) -> ClaudeLLM | ClaudeCodeLLM:
+    return _llm(backend(), effort or config.effort(), _key_fingerprint())
 
 
 def online() -> bool:
-    return config.has_api_key() and not st.session_state.get("offline", config.offline())
+    return backend() != "offline"
 
 
 def library() -> dict[str, tuple[Case, object]]:
@@ -261,17 +292,28 @@ def sidebar() -> None:
 
 
 def _settings() -> None:
-    _api_key_input()
-    st.session_state.setdefault("offline", config.offline())
-    st.toggle(
-        "Offline mode (no API calls)",
-        key="offline",
-        disabled=not config.has_api_key(),
-        help="Rule-based counterpart and template feedback. Forced on without an API key.",
+    st.session_state.setdefault("backend", default_backend())
+    st.radio(
+        "Connect to Claude via",
+        list(BACKENDS),
+        format_func=BACKENDS.get,
+        key="backend",
+        help="Claude Code uses your logged-in Claude plan through the local `claude` CLI "
+        "(personal use). The API key option bills an Anthropic API account. Offline uses "
+        "a rule-based counterpart and template feedback.",
     )
+    choice = st.session_state["backend"]
+    if choice == "api":
+        _api_key_input()
+    if choice == "claude-code" and not config.claude_bin():
+        st.warning("Claude Code CLI not found on this machine; running offline.")
     if online():
+        where = "plan usage" if backend() == "claude-code" else "API usage"
         st.caption(f"Claude: `{config.model()}` · chat effort `{config.chat_effort()}`")
-        st.caption(f"API usage this server run: {_total_calls()} calls, ~${_total_cost():.2f}")
+        st.caption(
+            f"{where.capitalize()} this run: {_total_calls()} calls "
+            f"(≈ ${_total_cost():.2f} at API prices)"
+        )
     else:
         st.caption("Running offline: rule-based counterpart, template feedback.")
     st.toggle(
@@ -290,16 +332,46 @@ def _settings() -> None:
 # --------------------------------------------------------------------------- pages
 
 
-def _api_key_input() -> None:
-    if config.has_api_key():
+def _apply_key(widget_key: str) -> None:
+    """on_change callback: validate the pasted key, use it for this app process, and clear
+    the field (callbacks run before widgets render, so the field can be reset here)."""
+    key = st.session_state.get(widget_key, "").strip()
+    st.session_state[widget_key] = ""
+    if not key:
         return
-    key = st.text_input(
-        "Anthropic API key",
+    problem = check_api_key(key)
+    if problem:
+        st.session_state["api_key_error"] = f"Key not saved: {problem}."
+        return
+    os.environ["ANTHROPIC_API_KEY"] = key
+    st.session_state.pop("api_key_error", None)
+    st.session_state["backend"] = "api"
+    st.session_state["api_key_ok"] = True
+
+
+def _api_key_input(where: str = "settings") -> None:
+    """Enter, replace, or remove the API key. Kept in this process's environment only
+    (never written to disk); a key from .env can be replaced the same way."""
+    current = os.getenv("ANTHROPIC_API_KEY", "")
+    widget_key = f"api_key_{where}"
+    if current:
+        st.caption(f"API key in use: …{current[-4:]}")
+    st.text_input(
+        "Replace API key" if current else "Anthropic API key",
         type="password",
-        help="Kept in this app's memory only. Or put ANTHROPIC_API_KEY in .env.",
+        key=widget_key,
+        placeholder="sk-ant-…",
+        on_change=_apply_key,
+        args=(widget_key,),
+        help="Press Enter to apply. Checked against the API (free), kept in memory only. "
+        "To make it permanent, put ANTHROPIC_API_KEY in .env.",
     )
-    if key:
-        os.environ["ANTHROPIC_API_KEY"] = key.strip()
+    if error := st.session_state.get("api_key_error"):
+        st.error(error)
+    elif st.session_state.pop("api_key_ok", False):
+        st.success("Key works and is now in use.")
+    if current and st.button("Remove key", key=f"remove_key_{where}"):
+        os.environ.pop("ANTHROPIC_API_KEY", None)
         st.rerun()
 
 
@@ -317,11 +389,13 @@ def page_setup() -> None:
         st.markdown("#### 📂 Upload your case files")
         if not online():
             style.banner(
-                "Reading your files needs Claude. Paste an Anthropic API key below, or try a "
-                "saved case on the right (works offline).",
+                "Reading your files needs Claude: sign in to Claude Code on this machine, or "
+                "paste an Anthropic API key below. Saved cases on the right work offline.",
                 "info",
             )
-            _api_key_input()
+            _api_key_input("setup")
+        elif backend() == "claude-code":
+            st.caption("Using Claude Code with your Claude plan (no API key needed).")
         files = st.file_uploader(
             "Case materials",
             type=list(UPLOAD_TYPES),
@@ -836,10 +910,15 @@ def page_feedback() -> None:
         )
     else:
         with st.expander("Feedback settings", expanded=debrief is None):
+            on_plan = backend() == "claude-code"
             sim_choice = st.radio(
                 "Simulate alternatives against",
-                ["Same AI counterpart (slower, uses API)", "Fast rule-based simulator (free)"],
-                index=0 if online() else 1,
+                [
+                    "Same AI counterpart (slower, uses " + ("your plan)" if on_plan else "API)"),
+                    "Fast rule-based simulator (free)",
+                ],
+                # On a plan, ~30 rollout calls eat into rate limits: opt in, don't default.
+                index=0 if online() and not on_plan else 1,
                 disabled=not online(),
             )
             use_llm = online() and sim_choice.startswith("Same")
@@ -850,10 +929,16 @@ def page_feedback() -> None:
             horizon = c[3].number_input("AI turns per rollout", 2, 10, 4)
             if use_llm:
                 calls = estimate_calls(int(cap), int(k), int(n), int(horizon)) + 1
-                st.caption(
-                    f"Up to ~{calls} API calls (≈ ${calls * EST_COST_PER_CALL:.2f}), "
-                    "typically 1–3 min."
-                )
+                if on_plan:
+                    st.caption(
+                        f"Up to ~{calls} Claude Code calls against your plan's limits, "
+                        "typically 2–5 min."
+                    )
+                else:
+                    st.caption(
+                        f"Up to ~{calls} API calls (≈ ${calls * EST_COST_PER_CALL:.2f}), "
+                        "typically 1–3 min."
+                    )
     if st.button("Generate feedback" if debrief is None else "Regenerate feedback", type="primary"):
         with st.spinner(
             "Writing your debrief…"
@@ -871,6 +956,7 @@ def page_feedback() -> None:
                 k=int(k),
                 n=int(n),
                 horizon=int(horizon),
+                max_workers=3 if backend() == "claude-code" else 8,
             )
             report = build_report(session, case, counterfactuals, llm() if online() else None)
             debrief = Debrief(
@@ -932,13 +1018,15 @@ def page_feedback() -> None:
 def _total_calls() -> int:
     if not online():
         return 0
-    return sum(_llm(e, _key_fingerprint()).usage.calls for e in ("low", "medium", "high"))
+    kind, fp = backend(), _key_fingerprint()
+    return sum(_llm(kind, e, fp).usage.calls for e in ("low", "medium", "high"))
 
 
 def _total_cost() -> float:
     if not online():
         return 0.0
-    return sum(_llm(e, _key_fingerprint()).usage.cost() for e in ("low", "medium", "high"))
+    kind, fp = backend(), _key_fingerprint()
+    return sum(_llm(kind, e, fp).usage.cost() for e in ("low", "medium", "high"))
 
 
 def _render_report(report: CoachingReport) -> None:
@@ -1241,7 +1329,7 @@ def page_cases() -> None:
     paste, upload = st.tabs(["Paste case text (uses Claude)", "Upload JSON"])
     with paste:
         if not online():
-            st.info("Parsing needs the API. Add a key in the sidebar or turn off offline mode.")
+            st.info("Parsing needs Claude: choose Claude Code or an API key in Settings.")
         with st.form("parse"):
             public = st.text_area("Public / general information", height=150)
             c1, c2 = st.columns(2)

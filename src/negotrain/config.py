@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import shutil
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -29,6 +30,17 @@ def chat_effort() -> str:
 def offline() -> bool:
     """Run without the API: rule-based counterpart and template feedback."""
     return os.getenv("NEGOTRAIN_OFFLINE", "").lower() in ("1", "true", "yes")
+
+
+def backend() -> str:
+    """Default LLM backend: auto | claude-code | api | offline. "auto" prefers the local
+    Claude Code CLI (no API key needed), then an API key, then offline."""
+    return os.getenv("NEGOTRAIN_BACKEND", "auto")
+
+
+def claude_bin() -> str | None:
+    """Path to the Claude Code CLI, if installed."""
+    return os.getenv("NEGOTRAIN_CLAUDE_BIN") or shutil.which("claude")
 
 
 def has_api_key() -> bool:

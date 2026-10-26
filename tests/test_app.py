@@ -259,3 +259,42 @@ def test_real_negotiation_saves_custom_terms_without_numeric_comparison(scenario
     saved = next(s for s in SessionStore().all() if s.kind == "real")
     assert saved.agreement.custom_terms == {"remote": CUSTOM}
     assert "Rehearsal vs real" in " ".join(str(h.value) for h in at.subheader)
+
+
+def test_api_key_can_be_set_replaced_and_removed(monkeypatch):
+    import os
+
+    from negotrain.app import views
+
+    good = {"sk-ant-good-1111", "sk-ant-good-2222"}
+    monkeypatch.setattr(views, "check_api_key", lambda k: None if k in good else "rejected")
+
+    at = page("page_setup")
+    at.text_input(key="api_key_setup").input("sk-ant-good-1111").run()
+    assert not at.exception
+    assert os.environ["ANTHROPIC_API_KEY"] == "sk-ant-good-1111"
+    assert "…1111" in visible_text(at)
+
+    at.text_input(key="api_key_settings").input("sk-ant-bad").run()
+    assert os.environ["ANTHROPIC_API_KEY"] == "sk-ant-good-1111"  # bad key not applied
+    assert any("rejected" in str(e.value) for e in at.error)
+
+    at.text_input(key="api_key_settings").input("sk-ant-good-2222").run()
+    assert os.environ["ANTHROPIC_API_KEY"] == "sk-ant-good-2222"
+    assert at.text_input(key="api_key_settings").value == ""  # field cleared after applying
+
+    button(at, "Remove key").click().run()
+    assert "ANTHROPIC_API_KEY" not in os.environ
+
+
+def test_default_backend_prefers_claude_code(monkeypatch):
+    from negotrain.app.views import default_backend
+
+    monkeypatch.delenv("NEGOTRAIN_OFFLINE")
+    monkeypatch.setenv("NEGOTRAIN_CLAUDE_BIN", "/usr/local/bin/claude")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-x")
+    assert default_backend() == "claude-code"  # preferred even when a key is present
+    monkeypatch.setenv("NEGOTRAIN_BACKEND", "api")
+    assert default_backend() == "api"
+    monkeypatch.setenv("NEGOTRAIN_OFFLINE", "1")
+    assert default_backend() == "offline"

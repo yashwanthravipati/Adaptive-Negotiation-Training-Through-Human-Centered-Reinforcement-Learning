@@ -154,7 +154,7 @@ def render(page: str) -> None:
         online = views.online()
         if not online:
             st.caption(
-                "Enable the API in Settings to ask questions. "
+                "Choose Claude Code or an API key in Settings to ask questions. "
                 "Your saved chat and sources remain available."
             )
         prompt = st.chat_input(

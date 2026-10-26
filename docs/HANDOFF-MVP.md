@@ -39,6 +39,15 @@ streamlit run src/negotrain/app/main.py       # http://localhost:8501
 pytest                                        # 59 offline tests
 ```
 
+- **Default: Claude Code (no API key).** If the `claude` CLI is installed and logged in, the
+  app uses `llm.ClaudeCodeLLM`: each call is a tool-less, non-persisted `claude -p`
+  session started from an empty temp dir, with `--json-schema` for structured output. It
+  counts against the user's Claude plan, so it's for one person's local use. Parent
+  `CLAUDE_CODE_*`/`CLAUDECODE` env vars are stripped; `--bare` is not used (it would
+  require an API key). Choose the connection in Settings or with `NEGOTRAIN_BACKEND` =
+  `auto` | `claude-code` | `api` | `offline`; `NEGOTRAIN_CLAUDE_BIN` overrides the CLI path.
+  Measured: ~4–8 s per call. In this mode, Feedback defaults to the free simulator and runs
+  rollouts 3 at a time.
 - **With `ANTHROPIC_API_KEY`** (in `.env`, or pasted on the first screen or in Settings):
   file parsing, the prep brief, the counterpart, and the coaching report use Claude.
   - The model is `claude-opus-5-5`.
@@ -184,7 +193,7 @@ step 1), and a Settings expander:
 ## Verified vs not verified
 
 **Verified offline:**
-- 59 tests pass, including AppTest flows:
+- 68 tests pass, including AppTest flows:
   - upload, then role, then unlock, then "New scenario";
   - a rehearsal where the counterpart's sheet stays hidden until the end;
   - feedback, profile, real negotiation, and case library pages;
@@ -192,7 +201,13 @@ step 1), and a Settings expander:
 - ruff and `scripts/tasks.py check` pass.
 - The landing, Prepare, Rehearse, and Feedback pages were checked visually in a browser.
 
-**Not verified:** anything that calls the real API. No key was available, so these have
+**Verified live since (2026-10-26):**
+- Vincent, via the API: counterpart tiers, rollouts, and the parser round trip (see the
+  T-010, T-021, and T-004 logs).
+- Mahdi, via Claude Code: a counterpart move, `parse_documents` on a real class case, and
+  the prep brief. The live test `tests/test_claude_code.py` passes.
+
+**Not verified at first:** anything that calls the real API. No key was available, so these have
 never run live:
 - counterpart chat (`ClaudeLLM.parse` with `CounterpartMove`);
 - `parse_documents` on real case files;

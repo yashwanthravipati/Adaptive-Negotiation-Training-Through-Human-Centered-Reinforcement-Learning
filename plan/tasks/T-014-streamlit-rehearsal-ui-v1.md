@@ -1,7 +1,7 @@
 ---
 id: T-014
 title: Streamlit rehearsal UI v1
-status: in-progress
+status: done
 milestone: M1
 workstream: app
 owner: mahdi
@@ -28,3 +28,6 @@ Put it in src/negotrain/app/. Offers come from a per-issue builder with listed s
 - 2026-10-26: Added open-ended issue proposals in isolated worktree on t-014-open-ended-offers, preserving the earlier ZIP work and leaving localhost:8501 unchanged. Editable suggestion fields save Offer.custom_terms verbatim; counterpart prompts and responses support custom proposals and acceptance. Custom agreements have null numeric scores; qualitative coaching remains available, while numeric rollouts/concession metrics and unsupported numeric comparisons are skipped. Decision 0006 documents the schema and economic-check limitation. Regression tests cover saved offers, information hiding, known hard constraints, profile/curriculum handling, and AppTest rehearsal/debrief/real-outcome flows. Live API behavior is not tested.
 - 2026-10-26: Validation: all 84 offline tests pass; ruff lint and formatting, task validation (38 tasks), and git diff whitespace checks pass.
 - 2026-10-26: Added the right-hand personal assistant on t-014-personal-assistant in the isolated worktree. It answers explicit factual/hypothetical questions across steps (user-authorized exception documented in decision 0007), uses only projected visible context, and persists chats/attachments by participant, case, and role. New file/paste imports retain original source text with role visibility; legacy cases can attach sources. All 100 offline tests pass; lint/format/task/whitespace checks pass. Browser checks with synthetic data and scripted replies verified desktop/mobile layout, navigation persistence, and preservation of an unsent rehearsal draft. No live API calls; existing apps on ports 8501 and 8765 remain untouched.
+- 2026-10-26: API key can now be replaced or removed any time (Settings); pasted keys are checked with a free models.list call (llm.check_api_key) before use.
+- 2026-10-26: Claude Code backend (llm.ClaudeCodeLLM via claude -p, --json-schema): default when the CLI is installed, so no API key is needed; Settings radio picks Claude Code / API key / Offline. Verified live: counterpart move 7.6 s, live test passes, real case parsed and brief written through the app.
+- 2026-10-26: At the user's request, integrated the assistant and latest origin/MVP in the primary checkout on MVP. Preserved the Claude Code/API settings and aligned assistant connection guidance. All 109 offline tests pass (one live test deselected); lint, formatting, task validation, and whitespace checks pass. Tests used temporary data directories; existing credentials, cases, sessions, and running servers were preserved.
