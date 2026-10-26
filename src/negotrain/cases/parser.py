@@ -155,16 +155,7 @@ def _user_message(public_text: str, role_texts: dict[str, str], infer_missing: b
     return "\n\n".join(parts)
 
 
-def parse_case(
-    public_text: str,
-    role_texts: dict[str, str],
-    llm: LLM,
-    *,
-    infer_missing: bool = True,
-    source: str = "",
-) -> Case:
-    """Structured ``Case`` from raw case text. ``role_texts`` maps role name -> sheet text."""
-    messages = [{"role": "user", "content": _user_message(public_text, role_texts, infer_missing)}]
+def _parse(messages: list[dict], llm: LLM, source: str) -> Case:
     error = ""
     for _ in range(2):
         parsed = llm.parse(SYSTEM, messages, ParsedCase)
@@ -180,3 +171,47 @@ def parse_case(
                 },
             ]
     raise ValueError(f"could not parse a valid case: {error}")
+
+
+def parse_case(
+    public_text: str,
+    role_texts: dict[str, str],
+    llm: LLM,
+    *,
+    infer_missing: bool = True,
+    source: str = "",
+) -> Case:
+    """Structured ``Case`` from raw case text. ``role_texts`` maps role name -> sheet text."""
+    messages = [{"role": "user", "content": _user_message(public_text, role_texts, infer_missing)}]
+    return _parse(messages, llm, source)
+
+
+def parse_documents(
+    documents: dict[str, str],
+    llm: LLM,
+    *,
+    infer_missing: bool = True,
+    source: str = "",
+) -> Case:
+    """Structured ``Case`` from a set of uploaded files (file name -> extracted text).
+
+    The model decides which file holds the public information and which holds each
+    party's confidential instructions, so participants can upload everything they were
+    given without labeling it.
+    """
+    parts = [f"# File: {name}\n{text.strip()}" for name, text in documents.items()]
+    instruction = (
+        "These files are all the materials one participant has for a two-party negotiation "
+        "exercise. Work out which parts are public information and which are each party's "
+        "confidential instructions (file names and headings are clues)."
+    )
+    if infer_missing:
+        instruction += (
+            " If a party's confidential instructions are not among the files, infer a "
+            "plausible sheet for that party from the public information and mark it "
+            "inferred=true."
+        )
+    else:
+        instruction += " Include only roles whose instructions are provided."
+    content = "\n\n".join(parts + [instruction])
+    return _parse([{"role": "user", "content": content}], llm, source)

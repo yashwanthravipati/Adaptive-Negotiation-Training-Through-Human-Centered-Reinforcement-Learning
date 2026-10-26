@@ -120,3 +120,57 @@ def test_pages_ask_for_onboarding_first():
     at = page("page_rehearse", pid=None)
     assert not at.exception
     assert "onboarding" in visible_text(at)
+
+
+def test_prepare_from_library_builds_brief_and_starts_training(onboarded):
+    at = page("page_prepare")
+    assert not at.exception
+    button(at, "Use this case").click().run()
+    button(at, "Prepare my brief").click().run()
+    assert not at.exception
+    text = visible_text(at)
+    assert "Checklist" in text and "Training plan" in " ".join(str(h.value) for h in at.subheader)
+    case = load_case(CASE)
+    assert case.role("recruiter").confidential_brief not in text
+    button(at, "Start").click().run()  # first training step: warm-up, tier 2
+    assert not at.exception
+    session = at.session_state["session"]
+    assert session.case_id == case.id and session.counterpart_profile.tier == 2
+
+
+def test_prepare_upload_builds_a_scenario(onboarded, tmp_path, monkeypatch):
+    import shutil
+
+    from negotrain.app import views
+    from negotrain.llm import ScriptedLLM
+    from test_parser import parsed_from
+
+    cases = tmp_path / "cases"
+    cases.mkdir()
+    shutil.copy(CASE, cases)
+    monkeypatch.setenv("NEGOTRAIN_CASES_DIR", str(cases))
+    uploaded = parsed_from(load_case(CASE)) | {"id": "uploaded_case", "title": "Uploaded"}
+    uploaded["roles"][1]["inferred"] = True
+    scripted = ScriptedLLM([uploaded])
+    monkeypatch.setattr(views, "online", lambda: True)
+    monkeypatch.setattr(views, "llm", lambda effort=None: scripted)
+    monkeypatch.setattr(views, "_total_calls", lambda: 0)
+    monkeypatch.setattr(views, "_total_cost", lambda: 0.0)
+
+    at = page("page_prepare")
+    at.file_uploader[0].set_value(
+        [
+            ("general.txt", b"Public info about the hiring.", "text/plain"),
+            ("candidate.md", b"My confidential sheet.", "text/markdown"),
+            ("scan.pdf", b"not really a pdf", "application/pdf"),
+        ]
+    )
+    at.run()
+    button(at, "Build scenario").click().run()
+    assert not at.exception
+    assert (cases / "private" / "uploaded_case.json").exists()
+    assert "general.txt" in scripted.calls[0][1][0]["content"]
+    assert any("scan.pdf" in str(w.value) for w in at.warning)  # unreadable file reported
+    assert at.session_state["prep_case_id"] == "uploaded_case"
+    # The uploaded sheet's role is preselected; the other side is marked as estimated.
+    assert "estimated version" in visible_text(at)

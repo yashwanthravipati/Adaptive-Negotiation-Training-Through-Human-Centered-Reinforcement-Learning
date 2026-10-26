@@ -19,6 +19,7 @@ views.PAGES.update(
         "start": st.Page(
             views.page_start, title="Start", icon="👋", url_path="start", default=True
         ),
+        "prepare": st.Page(views.page_prepare, title="Prepare", icon="📂", url_path="prepare"),
         "rehearse": st.Page(views.page_rehearse, title="Rehearse", icon="💬", url_path="rehearse"),
         "feedback": st.Page(views.page_feedback, title="Feedback", icon="📊", url_path="feedback"),
         "profile": st.Page(views.page_profile, title="My profile", icon="🧭", url_path="profile"),

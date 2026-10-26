@@ -16,6 +16,8 @@ authors = [
 dependencies = [
   "anthropic>=2.0",
   "pydantic>=2.7",
+  "pypdf>=4",
+  "python-docx>=1.1",
   "python-dotenv>=1.0",
   "streamlit>=1.40",
 ]

@@ -42,10 +42,15 @@ handy for demos and UI work.
 
 Typical flow for a class simulation:
 
-1. **Case library**: paste the case's public information and your confidential sheet; the
-   parser builds a scorable case (estimating the other side's sheet if you don't have it)
-   and saves it to `data/cases/private/` (gitignored). Facilitators can upload JSON instead.
-2. **Start**: enter a pseudonymous participant id and complete onboarding once.
+1. **Start**: enter a pseudonymous participant id and complete onboarding once.
+2. **Prepare**: upload all your case files (PDF, Word, text). Claude works out which file
+   is which, builds a scorable scenario (estimating the other side's instructions if you
+   don't have them; saved to `data/cases/private/`, gitignored), and writes a prep brief
+   from your side only: overview, walk-away and target, what's at stake per issue,
+   hypotheses about the other side, questions to ask, opening plan, pitfalls, checklist.
+   A training plan then starts rehearsals on that scenario against warm-up, realistic,
+   tough, and profile-recommended counterparts. (The Case library page also takes pasted
+   text or case JSON.)
 3. **Rehearse**: pick the case and your role. The counterpart is recommended from your
    profile (or choose a tier 1-5); each rehearsal samples a slightly different opponent.
    Chat, attach formal offers with the per-issue builder, accept, or walk away. No hints

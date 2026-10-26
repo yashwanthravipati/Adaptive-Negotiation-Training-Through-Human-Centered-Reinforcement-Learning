@@ -46,7 +46,9 @@
 | `config.py` | Env-driven settings (`NEGOTRAIN_MODEL`, `NEGOTRAIN_EFFORT`, `NEGOTRAIN_SESSIONS_DIR`) | infra | v1 |
 | `cases/__init__.py` | `load_case` | cases | v1 |
 | `cases/scoring.py` | `score_offer`, `joint_points`, `max_joint_offer`, `efficiency` | cases | v1 |
-| `cases/parser.py` | Raw case text → `Case` via list-based `ParsedCase`; infers a missing sheet | cases | MVP (T-004) |
+| `cases/parser.py` | Raw case text or a set of files (`parse_documents`) → `Case`; infers a missing sheet | cases | MVP (T-004) |
+| `cases/documents.py` | Text from uploaded PDF / Word / text files | cases | MVP (T-045) |
+| `prep.py` | Prep brief: `prep_numbers` (code), `build_prep` (LLM + template); own sheet only | app | MVP (T-045) |
 | `cases/offers.py` | Offer search: `closest_offer`, `best_joint_offer`, `claim`, `surplus_share` | cases | MVP |
 | `counterpart/profiles.py` | Tier presets, `sample_profile`, `describe` | counterpart | v1 (T-012) |
 | `counterpart/aspiration.py` | Concession schedule (`aspiration`) | counterpart | MVP (T-011) |
@@ -58,7 +60,7 @@
 | `curriculum/` | `next_scenario`, `counterpart_for` | counterpart | MVP (T-027) |
 | `sessions.py` | `SessionStore` (+ artifacts), `ParticipantStore` | infra | v1 |
 | `cli.py` | `negotrain show`, `negotrain play` | infra | v1 |
-| `app/` | Streamlit UI: Start, Rehearse, Feedback, My profile, Real negotiation, Case library | app | MVP (T-014, T-028) |
+| `app/` | Streamlit UI: Start, Prepare, Rehearse, Feedback, My profile, Real negotiation, Case library | app | MVP (T-014, T-028) |
 
 ## Counterpart dials
 
