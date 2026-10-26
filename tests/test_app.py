@@ -285,3 +285,16 @@ def test_api_key_can_be_set_replaced_and_removed(monkeypatch):
 
     button(at, "Remove key").click().run()
     assert "ANTHROPIC_API_KEY" not in os.environ
+
+
+def test_default_backend_prefers_claude_code(monkeypatch):
+    from negotrain.app.views import default_backend
+
+    monkeypatch.delenv("NEGOTRAIN_OFFLINE")
+    monkeypatch.setenv("NEGOTRAIN_CLAUDE_BIN", "/usr/local/bin/claude")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-x")
+    assert default_backend() == "claude-code"  # preferred even when a key is present
+    monkeypatch.setenv("NEGOTRAIN_BACKEND", "api")
+    assert default_backend() == "api"
+    monkeypatch.setenv("NEGOTRAIN_OFFLINE", "1")
+    assert default_backend() == "offline"

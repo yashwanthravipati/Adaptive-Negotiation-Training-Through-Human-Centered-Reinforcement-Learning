@@ -35,10 +35,14 @@ python scripts/tasks.py next      # tasks that are ready to pick up
 streamlit run src/negotrain/app/main.py
 ```
 
-Opens at http://localhost:8501. With `ANTHROPIC_API_KEY` in `.env` (or pasted into the
-sidebar) the counterpart, feedback, and case parser use Claude. Without a key, or with
-`NEGOTRAIN_OFFLINE=1`, it runs on a rule-based counterpart and template feedback, which is
-handy for demos and UI work.
+Opens at http://localhost:8501. The app talks to Claude in one of three ways (Settings in the
+sidebar, or `NEGOTRAIN_BACKEND`):
+
+- **Claude Code (default when installed):** uses your logged-in Claude plan through the
+  local `claude` CLI, with no API key. For personal, local use.
+- **API key:** `ANTHROPIC_API_KEY` in `.env`, or pasted in the app.
+- **Offline:** rule-based counterpart and template feedback (also `NEGOTRAIN_OFFLINE=1`),
+  handy for demos and UI work.
 
 The app runs locally for one person (no sign-in). Typical flow for a class simulation:
 

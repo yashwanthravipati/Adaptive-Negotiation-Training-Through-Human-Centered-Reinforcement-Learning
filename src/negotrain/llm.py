@@ -3,13 +3,22 @@
 Every model call in the project goes through an ``LLM`` so that we can swap models in one
 place, keep token accounting for cost estimates, and run the whole stack offline with
 ``ScriptedLLM`` in tests. Do not construct ``anthropic.Anthropic`` anywhere else.
+
+Two real backends: ``ClaudeLLM`` (Anthropic API key) and ``ClaudeCodeLLM`` (the local
+Claude Code CLI, which runs on whatever plan Claude Code is logged into; for one person's
+local use, not for serving other people).
 """
 
 from __future__ import annotations
 
+import json
+import os
+import subprocess
+import tempfile
 import threading
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
+from types import SimpleNamespace
 from typing import Any, Protocol, TypeVar
 
 import anthropic
@@ -150,6 +159,133 @@ def check_api_key(api_key: str) -> str | None:
     except anthropic.APIStatusError as e:
         return f"the API returned an error ({e.status_code})"
     return None
+
+
+# Variables Claude Code sets for its own child processes. Stripped so `claude -p` runs as a
+# fresh top-level session even when this app was started from inside Claude Code.
+_PARENT_SESSION_VARS = ("CLAUDECODE", "CLAUDE_PID", "CLAUDE_EFFORT")
+
+
+def _child_env() -> dict[str, str]:
+    return {
+        k: v
+        for k, v in os.environ.items()
+        if k not in _PARENT_SESSION_VARS and not k.startswith("CLAUDE_CODE_")
+    }
+
+
+def flatten(messages: Sequence[Message]) -> str:
+    """One prompt from a multi-turn history: `claude -p` takes a single message."""
+    if len(messages) == 1:
+        return str(messages[0]["content"])
+    parts = ["The conversation so far (your own earlier replies are marked YOU):"]
+    for m in messages:
+        who = "YOU" if m["role"] == "assistant" else "THEM"
+        parts.append(f"--- {who} ---\n{m['content']}")
+    parts.append("--- END ---\nWrite your reply to the last message.")
+    return "\n\n".join(parts)
+
+
+class ClaudeCodeLLM:
+    """Claude through the local Claude Code CLI (`claude -p`), so no API key is needed:
+    calls count against the plan Claude Code is logged into.
+
+    Each call is a fresh, tool-less, non-persisted session started from an empty working
+    directory (so no project files or CLAUDE.md are pulled in). Structured output uses
+    ``--json-schema``. Slower than the API (process start-up, no prompt caching across
+    calls) and subject to the plan's rate limits.
+    """
+
+    def __init__(
+        self,
+        model: str | None = None,
+        effort: str | None = None,
+        binary: str | None = None,
+        timeout: float = 300,
+    ):
+        self.model = model or config.model()
+        self.effort = effort or config.effort()
+        self.binary = binary or config.claude_bin()
+        if not self.binary:
+            raise RuntimeError("Claude Code CLI not found (install it or set NEGOTRAIN_CLAUDE_BIN)")
+        self.timeout = timeout
+        self.workdir = tempfile.mkdtemp(prefix="negotrain-claude-")
+        self.usage = Usage()
+
+    def _command(self, system: str, schema: dict | None) -> list[str]:
+        cmd = [
+            self.binary,
+            "-p",
+            "--output-format",
+            "json",
+            "--model",
+            self.model,
+            "--effort",
+            self.effort,
+            "--tools",
+            "",
+            "--disable-slash-commands",
+            "--strict-mcp-config",
+            "--no-session-persistence",
+            "--system-prompt",
+            system,
+        ]
+        if schema is not None:
+            cmd += ["--json-schema", json.dumps(schema)]
+        return cmd
+
+    def _run(self, system: str, messages: Sequence[Message], schema: dict | None) -> dict:
+        try:
+            proc = subprocess.run(
+                self._command(system, schema),
+                input=flatten(messages),
+                capture_output=True,
+                text=True,
+                timeout=self.timeout,
+                cwd=self.workdir,
+                env=_child_env(),
+            )
+        except subprocess.TimeoutExpired as e:
+            raise RuntimeError(f"Claude Code took longer than {self.timeout:.0f}s") from e
+        try:
+            data = json.loads(proc.stdout)
+        except json.JSONDecodeError:
+            detail = (proc.stderr or proc.stdout).strip()[-400:]
+            raise RuntimeError(f"Claude Code failed (exit {proc.returncode}): {detail}") from None
+        usage = data.get("usage") or {}
+        self.usage.add(
+            SimpleNamespace(
+                input_tokens=usage.get("input_tokens", 0),
+                output_tokens=usage.get("output_tokens", 0),
+                cache_read_input_tokens=usage.get("cache_read_input_tokens", 0),
+                cache_creation_input_tokens=usage.get("cache_creation_input_tokens", 0),
+            )
+        )
+        if data.get("stop_reason") == "refusal":
+            raise LLMRefusal("model declined (via Claude Code)")
+        if data.get("is_error") or proc.returncode != 0:
+            raise RuntimeError(f"Claude Code error: {str(data.get('result', ''))[:400]}")
+        return data
+
+    def complete(self, system: str, messages: Sequence[Message], *, max_tokens: int = 16000) -> str:
+        return str(self._run(system, messages, None).get("result", ""))
+
+    def parse(
+        self,
+        system: str,
+        messages: Sequence[Message],
+        output_type: type[T],
+        *,
+        max_tokens: int = 16000,
+    ) -> T:
+        data = self._run(system, messages, output_type.model_json_schema())
+        out = data.get("structured_output")
+        if out is None:
+            try:
+                out = json.loads(data.get("result") or "")
+            except json.JSONDecodeError:
+                raise RuntimeError("Claude Code returned no structured output") from None
+        return output_type.model_validate(out)
 
 
 Responder = Callable[[str, Sequence[Message]], Any]
