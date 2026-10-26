@@ -64,6 +64,14 @@ class RoleSheet(BaseModel):
     )
 
 
+class SourceDocument(BaseModel):
+    """Original extracted text and the roles allowed to read the whole document."""
+
+    name: str
+    text: str
+    visible_to: list[str] = Field(default_factory=list)
+
+
 class Case(BaseModel):
     id: str
     title: str
@@ -71,6 +79,7 @@ class Case(BaseModel):
     issues: list[Issue]
     roles: list[RoleSheet]
     source: str = Field(default="", description="Provenance / license note")
+    source_documents: list[SourceDocument] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def _check_points_cover_issues(self) -> Case:

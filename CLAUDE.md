@@ -64,6 +64,8 @@ src/negotrain/
   schemas.py        Case, RoleSheet, Issue, Option, Constraint, Offer, Turn, Session, CounterpartProfile
   llm.py            LLM protocol, ClaudeLLM, ScriptedLLM, LLMRefusal, Usage
   config.py         env settings (NEGOTRAIN_MODEL, NEGOTRAIN_EFFORT, NEGOTRAIN_SESSIONS_DIR)
+  assistant.py      personal assistant context, source retrieval, private conversation models
+  app/assistant_panel.py  persistent right-hand chat (Streamlit fragment)
   cases/            load_case, scoring.py (deterministic), parser.py (T-004)
   counterpart/      agent.py (CounterpartAgent), profiles.py (tiers, dials, sampling)
   feedback/         counterfactual credit assignment and coaching (T-020 to T-023)
@@ -97,11 +99,15 @@ tests/              pytest; `case` fixture loads data/cases/cloudline_hiring.jso
 
 ## Product and research guardrails (do not violate without the user's say-so)
 
-- **No live move recommendations** during a negotiation (decision 0002). Feedback is
-  post-session only.
+- **Automatic coaching remains post-session** (decision 0002). The user-requested personal
+  assistant answers explicit questions, including hypotheticals, during rehearsal
+  (decision 0007). It never sends a move to the counterpart or uses an unrevealed sheet.
 - **Information hiding:** the counterpart never sees the user's confidential sheet, and the
   user never sees the counterpart's sheet before the debrief. Test this when you touch
   prompts or the UI.
+- **Assistant context:** use only visible role-projected sources, own brief, and the visible
+  conversation/feedback. Never serialize a full Case or Session into its prompt. Raw
+  source text and assistant chats stay in the existing gitignored private data folders.
 - **Listed-offer economics are enforced in code**: reservation values and the aspiration
   schedule (decision 0003). User-requested custom terms are qualitative and unscored
   (decision 0006); never invent points or claim numeric guarantees for those agreements.

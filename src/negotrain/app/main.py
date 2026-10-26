@@ -14,14 +14,14 @@ import streamlit as st
 
 st.set_page_config(page_title="NegoTrain", page_icon="🤝", layout="wide")
 
-from negotrain.app import views  # noqa: E402
+from negotrain.app import assistant_panel, views  # noqa: E402
 
 views.sidebar()
 views.PAGES.clear()
 if views.active_scenario() is None:
     # Nothing is unlocked until there is a scenario: the upload step is the whole app.
     views.PAGES["setup"] = st.Page(views.page_setup, title="Upload case", icon="📂", default=True)
-    st.navigation([views.PAGES["setup"]], position="hidden").run()
+    current_page = st.navigation([views.PAGES["setup"]], position="hidden")
 else:
     views.PAGES.update(
         {
@@ -40,10 +40,17 @@ else:
         }
     )
     pages = views.PAGES
-    st.navigation(
+    current_page = st.navigation(
         {
             "Practice": [pages["prepare"], pages["rehearse"], pages["feedback"]],
             "Progress": [pages["profile"], pages["real"]],
             "More": [pages["cases"]],
         }
-    ).run()
+    )
+
+with st.container(key="workspace_shell"):
+    main_column, assistant_column = st.columns([3, 1.3], gap="large")
+    with main_column, st.container(key="main_page"):
+        current_page.run()
+    with assistant_column:
+        assistant_panel.render(current_page.title)

@@ -57,9 +57,10 @@ These shape the whole schedule. Each one has a task.
 | Counterpart | Hybrid: prompt plus code-enforced concession schedule (T-010 to T-012) | Calibrated to human data (T-018) |
 | Real trials | Human-vs-human mode in the app (T-015) | Rehearsal-vs-real debrief (T-028) |
 
-**Product principle (decision 0002):** no live move recommendations during a negotiation.
-Feedback comes after the session. The project argues for building skill rather than
-dependence, so the tool must not do the negotiating for the user.
+**Product principle (decisions 0002 and 0007):** automatic coaching and counterfactual
+feedback remain after the session. The user-requested personal assistant is an on-demand
+exception: it can answer factual and hypothetical questions during rehearsal using only
+user-visible information. It never sends a move or negotiates on the user's behalf.
 
 ## 4. System overview
 

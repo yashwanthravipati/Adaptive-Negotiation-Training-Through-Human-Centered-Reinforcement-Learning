@@ -823,6 +823,7 @@ def page_feedback() -> None:
         ),
     )
     session = by_id[sid]
+    st.session_state["assistant_feedback_session"] = sid
     case = lib[session.case_id][0]
     outcome_metrics(session, case)
 

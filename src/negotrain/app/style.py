@@ -14,7 +14,28 @@ import streamlit as st
 
 CSS = """
 <style>
-.block-container {max-width: 1180px; padding-top: 2.2rem; padding-bottom: 4rem;}
+.block-container {max-width: 1640px; padding-top: 2.2rem; padding-bottom: 4rem;}
+.st-key-personal_assistant {
+  background: rgba(255,255,255,.88); border-radius: 18px; padding: 1.1rem;
+  box-shadow: 0 5px 25px rgba(16,24,40,.05);
+  max-height: calc(100dvh - 6rem); overflow-y: auto;
+}
+[data-testid="stColumn"]:has(.st-key-personal_assistant) {
+  position: sticky; top: 4.5rem; align-self: flex-start;
+}
+.st-key-personal_assistant [data-testid="stChatMessage"] {
+  padding: .6rem .7rem; border: 0; background: #F5F6FB;
+}
+.st-key-personal_assistant h3 {font-size: 1.2rem; padding-top: 0;}
+@media (max-width: 1100px) {
+  [data-testid="stHorizontalBlock"]:has(> [data-testid="stColumn"] .st-key-personal_assistant) {
+    flex-wrap: wrap;
+  }
+  [data-testid="stColumn"]:has(.st-key-personal_assistant),
+  [data-testid="stColumn"]:has(> [data-testid="stVerticalBlock"] .st-key-main_page) {
+    position: static; width: 100%; flex: 1 1 100%; min-width: 0;
+  }
+}
 h1, h2, h3 {letter-spacing: -0.015em;}
 
 .nt-hero {

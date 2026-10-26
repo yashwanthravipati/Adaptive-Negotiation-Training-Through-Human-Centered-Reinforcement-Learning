@@ -75,6 +75,20 @@ only evaluate listed options; use the AI counterpart for open-ended negotiation.
 
 "New scenario" in the sidebar goes back to step 1.
 
+**Your assistant** stays on the right across Prepare, Rehearse, Feedback, and the other
+pages. Ask about a fact in the materials, unpack your brief, or paste a possible reply
+and ask how it might land. Chat is private to your participant, case, and role, survives
+page changes/restarts, and never sends a move to the counterpart. "New chat" clears the
+conversation while keeping attached sources.
+
+The assistant cites case sections/source filenames and labels hypothetical responses as
+possibilities. It uses your role's visible material; the other sheet is included only on
+a finished rehearsal/debrief page where it is already revealed. It has no live web search.
+New imports retain original extracted source text with role access classifications;
+mixed or unclassified files are withheld. For older imports, or additional documents,
+use **Sources and context → Add source documents** in the panel (ZIPs work too).
+Offline, saved chat and sources remain readable, but new AI replies require the API.
+
 Feedback with the Claude counterpart makes up to ~37 API calls per session at the default
 settings; the page shows an estimate before running (not yet measured live), and the free
 rule-based simulator is the alternative. Data lands in `data/sessions/` (gitignored).

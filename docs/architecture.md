@@ -57,6 +57,8 @@
 | `cases/parser.py` | Raw case text or a set of files (`parse_documents`) → `Case`; infers a missing sheet | cases | MVP (T-004) |
 | `cases/documents.py` | Text from uploaded PDF / Word / text files and ZIP bundles; per-file warnings | cases | MVP (T-045) |
 | `prep.py` | Prep brief: `prep_numbers` (code), `build_prep` (LLM + template); own sheet only | app | MVP (T-045) |
+| `assistant.py` | Explicit visible context, source excerpt retrieval, role-scoped chat models, one LLM reply | app | MVP (T-014) |
+| `app/assistant_panel.py` | Persistent right-hand assistant fragment, attachments, retry and clear-chat UI | app | MVP (T-014) |
 | `cases/offers.py` | Offer search: `closest_offer`, `best_joint_offer`, `claim`, `surplus_share` | cases | MVP |
 | `counterpart/profiles.py` | Tier presets, `sample_profile`, `describe` | counterpart | v1 (T-012) |
 | `counterpart/aspiration.py` | Concession schedule (`aspiration`) | counterpart | MVP (T-011) |
@@ -125,3 +127,37 @@ All new fields have defaults, so existing session and case JSON still loads.
 - `CounterfactualReport.skipped_reason` explains why numeric rollouts were not run.
   Qualitative coaching remains available. The rule-based opponent cannot evaluate custom
   terms and explicitly identifies its alternative as using listed options.
+
+## Personal assistant (decision 0007)
+
+The shared app shell renders the selected page and the assistant in adjacent columns.
+The assistant is sticky and independently scrollable on desktop; columns stack on narrow
+screens. Chat interactions run in a Streamlit fragment so an unsent rehearsal form stays
+intact. This implements the user's request for on-demand questions during every step,
+including rehearsal, as a scoped exception to decision 0002's automatic-feedback policy.
+
+`assistant.context_sections` explicitly projects the public case, own role/points, matching
+prep, visible turns/offers, and matching feedback. It never serializes the full Case or
+Session. The other sheet is included only for the selected finished rehearsal on Rehearse
+or Feedback. Internal session notes, seeds, and unrevealed counterpart information are not
+included. Questions cannot append negotiation turns, send offers, or trigger rollouts.
+
+`Case.source_documents` is an optional list of `SourceDocument(name, text, visible_to)`.
+New file parses retain exact extracted originals. `ParsedCase.source_access` classifies
+each whole file as public, role-specific, or mixed; code maps that classification to role
+ids. Missing, ambiguous, unknown-role, and mixed classifications withhold the original.
+Pasted public/role instructions retain their original text with the declared role mapping.
+These fields default to empty lists so existing cases and parser fixtures remain valid.
+Source classification should be reviewed with the parsed case, as with role assignments.
+
+Additional documents explicitly attached to the assistant are saved for that role only.
+The prompt retrieves question-relevant source excerpts (24,000-character budget), includes
+their filenames/character ranges, and sends at most the latest 12 saved chat messages.
+Case facts require source attribution; hypothetical replies are labeled as guesses; no
+numeric scores or probabilities are invented. The assistant has no live browsing tool.
+
+`AssistantConversation` is stored via SessionStore under `data/sessions/assistant/`, keyed
+by a hash of participant/case/role. Source attachments share that scope. Questions are
+saved as pending before a request, enabling retry without duplicating successful exchanges.
+Successful replies use one `LLM.complete` call through the existing low-effort client and
+usage accounting. Assistant messages never enter the counterpart's conversation.

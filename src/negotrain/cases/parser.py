@@ -14,11 +14,12 @@ the fact that it is a guess.
 from __future__ import annotations
 
 import re
+from typing import Literal
 
 from pydantic import BaseModel, Field, ValidationError
 
 from negotrain.llm import LLM
-from negotrain.schemas import Case, Constraint, Issue, Option, RoleSheet
+from negotrain.schemas import Case, Constraint, Issue, Option, RoleSheet, SourceDocument
 
 
 class ParsedOption(BaseModel):
@@ -57,6 +58,14 @@ class ParsedRole(BaseModel):
     inferred: bool = Field(description="True if this sheet was not provided and you estimated it")
 
 
+class ParsedSourceAccess(BaseModel):
+    filename: str = Field(description="Exact uploaded filename, including archive paths")
+    audience: Literal["public", "role", "mixed"]
+    role_id: str | None = Field(
+        default=None, description="Role id when audience is role; otherwise null"
+    )
+
+
 class ParsedCase(BaseModel):
     id: str = Field(description="Short lowercase slug for the case")
     title: str
@@ -66,6 +75,10 @@ class ParsedCase(BaseModel):
     scoring_notes: str = Field(
         description="How the point tables were obtained: copied from the case, or estimated "
         "(and how), so a reviewer knows what to check"
+    )
+    source_access: list[ParsedSourceAccess] = Field(
+        default_factory=list,
+        description="Classify whole uploaded files: public, one role's material, or mixed/private",
     )
 
 
@@ -88,14 +101,19 @@ agreement (BATNA), on the same scale as the points.
 - Condense briefs, but keep every fact a negotiator would use.
 - If a role's confidential sheet is not provided and you are asked to infer it, write a \
 plausible sheet for that role from the public information, mark inferred=true, and say in \
-its brief that it is an estimate."""
+its brief that it is an estimate.
+- For uploaded files, classify each exact filename in source_access. Mark public ONLY \
+when the entire file contains information available to both parties. Mark role with the \
+role_id when the whole file is safe for that role alone (possibly including public info). \
+Mark mixed when it contains confidential material for both roles, instructor-only material, \
+or its audience is unclear. Never mark a file public just because its first section is public."""
 
 
 def _slug(text: str) -> str:
     return re.sub(r"[^a-z0-9]+", "_", text.lower()).strip("_") or "x"
 
 
-def to_case(parsed: ParsedCase, source: str = "") -> Case:
+def to_case(parsed: ParsedCase, source: str = "", documents: dict[str, str] | None = None) -> Case:
     issues = [
         Issue(
             id=_slug(i.id),
@@ -130,6 +148,20 @@ def to_case(parsed: ParsedCase, source: str = "") -> Case:
     note = f"Parsed by LLM. {parsed.scoring_notes}".strip()
     if len(roles) != 2:
         raise ValueError(f"expected exactly two roles, got {len(roles)}")
+    originals = []
+    role_ids = [r.id for r in roles]
+    for name, text in (documents or {}).items():
+        access = [entry for entry in parsed.source_access if entry.filename == name]
+        visible_to = []
+        # Missing or ambiguous classifications withhold the original before debrief.
+        if len(access) == 1:
+            entry = access[0]
+            if entry.audience == "public":
+                visible_to = role_ids
+            elif entry.audience == "role" and entry.role_id:
+                rid = _slug(entry.role_id)
+                visible_to = [rid] if rid in role_ids else []
+        originals.append(SourceDocument(name=name, text=text, visible_to=visible_to))
     return Case(
         id=_slug(parsed.id),
         title=parsed.title,
@@ -137,6 +169,7 @@ def to_case(parsed: ParsedCase, source: str = "") -> Case:
         issues=issues,
         roles=roles,
         source=f"{source} {note}".strip(),
+        source_documents=originals,
     )
 
 
@@ -155,12 +188,14 @@ def _user_message(public_text: str, role_texts: dict[str, str], infer_missing: b
     return "\n\n".join(parts)
 
 
-def _parse(messages: list[dict], llm: LLM, source: str) -> Case:
+def _parse(
+    messages: list[dict], llm: LLM, source: str, documents: dict[str, str] | None = None
+) -> Case:
     error = ""
     for _ in range(2):
         parsed = llm.parse(SYSTEM, messages, ParsedCase)
         try:
-            return to_case(parsed, source)
+            return to_case(parsed, source, documents)
         except (ValidationError, ValueError) as e:
             error = str(e)
             messages = messages + [
@@ -183,7 +218,24 @@ def parse_case(
 ) -> Case:
     """Structured ``Case`` from raw case text. ``role_texts`` maps role name -> sheet text."""
     messages = [{"role": "user", "content": _user_message(public_text, role_texts, infer_missing)}]
-    return _parse(messages, llm, source)
+    case = _parse(messages, llm, source)
+    originals = []
+    if public_text.strip():
+        originals.append(
+            SourceDocument(
+                name="Public instructions", text=public_text, visible_to=[r.id for r in case.roles]
+            )
+        )
+    for name, text in role_texts.items():
+        ids = [r.id for r in case.roles if name.casefold() in (r.name.casefold(), r.id.casefold())]
+        originals.append(
+            SourceDocument(
+                name=f"Role instructions: {name}",
+                text=text,
+                visible_to=ids if len(ids) == 1 else [],
+            )
+        )
+    return case.model_copy(update={"source_documents": originals})
 
 
 def parse_documents(
@@ -214,4 +266,4 @@ def parse_documents(
     else:
         instruction += " Include only roles whose instructions are provided."
     content = "\n\n".join(parts + [instruction])
-    return _parse([{"role": "user", "content": content}], llm, source)
+    return _parse([{"role": "user", "content": content}], llm, source, documents)

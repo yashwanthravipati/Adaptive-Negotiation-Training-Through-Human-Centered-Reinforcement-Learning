@@ -18,3 +18,9 @@ counterfactual analysis, and profile insights appear only after the session ends
 - The UI must not show hints, suggested replies, or "best next offer" during a session.
 - Counterfactual rollouts can run asynchronously after the session (and slower).
 - Prep-time rehearsal is the place for practice, not live support.
+
+## User-requested exception (2026-10-26)
+
+Decision 0007 records the user's explicit request for a personal assistant across every
+step, including hypothetical questions during rehearsal. This is an on-demand exception;
+automatic debriefs and numeric counterfactual rollouts remain post-session.
