@@ -39,7 +39,32 @@ def test_restart_and_unknown_failure_do_not_release_reservation(tmp_path):
     with pytest.raises(ValueError):
         restarted.settle(successful, 0, {})
     with pytest.raises(ValueError):
-        SpendLedger(tmp_path / "other", 151)
+        SpendLedger(tmp_path / "other", 201)
+
+
+def test_authorized_cap_change_survives_restart_and_preserves_uncertain_cost(tmp_path):
+    path = tmp_path / "budget.sqlite3"
+    ledger = SpendLedger(path)
+    failed = ledger.reserve("test", 8)
+    ledger.uncertain(failed, "Timeout")
+    ledger.set_authorized_limit(200, reason="User raised the evaluation cap to $200")
+    restarted = SpendLedger(path)
+    assert restarted.snapshot()["limit_usd"] == 200
+    assert restarted.snapshot()["accounted_usd"] == 8
+    assert restarted.snapshot()["unresolved_requests"] == 1
+    with ledger._connect() as db:
+        assert db.execute("SELECT old_cap,new_cap FROM limit_changes").fetchall() == [
+            (150_000_000, 200_000_000)
+        ]
+    with pytest.raises(ValueError):
+        ledger.set_authorized_limit(201, reason="Too high")
+    with pytest.raises(ValueError):
+        ledger.set_authorized_limit(200, reason=" ")
+    with pytest.raises(ValueError):
+        ledger.set_authorized_limit(7, reason="Below existing liability")
+    assert SpendLedger(path, 200).snapshot()["limit_usd"] == 200
+    assert SpendLedger(path, 100).snapshot()["limit_usd"] == 100
+    assert SpendLedger(path, 200).snapshot()["limit_usd"] == 100
 
 
 class FakeClient:

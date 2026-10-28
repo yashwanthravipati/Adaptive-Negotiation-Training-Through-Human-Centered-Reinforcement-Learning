@@ -9,6 +9,11 @@ randomly sampled virtual-user evaluation with at most $150 API spend, and increm
 commits/pushes to origin/MVP. They subsequently selected data/cases/sim3 for evaluations.
 Existing uploads, prep, persistence, custom-offer handling, and Streamlit flows are reused.
 
+2026-10-28 amendment: the user explicitly authorized sim3 role-material export to
+Anthropic, concurrent completion, and an increased cumulative cap of $200. The ledger
+records the cap amendment without releasing prior uncertain reservations. Final results
+and runtime-repair limitations are in docs/results/sim3_evaluation.md.
+
 The documents disagree in two material places. The default Beta filter preserves the
 prior and discounts evidence, as explicitly defined in new-spec.md. The discount_prior
 option implements report.tex's recursion, for sensitivity analysis. Report both the

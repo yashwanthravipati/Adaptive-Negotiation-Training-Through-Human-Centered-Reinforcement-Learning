@@ -33,3 +33,5 @@ Start rule-based: for example, an early conceder faces high-anchoring, slow-conc
   reversal test. API spend remains $0. Population calibration and sim3 evaluation pending.
 
 - 2026-10-28: Preparation now shows five sessions and passes the displayed belief-selected focus and dial overrides into every rehearsal step. The final step also adapts tier; the study fixes tiers separately.
+
+- 2026-10-28: Completed live comparison: adaptive held-out G gain .08712, 95% user-bootstrap CI [.06061,.11174]; adaptive-minus-no-focus .00852 [-.03030,.04356]. Adaptive-minus-random .03220 [.01799,.04830], exploratory N=8. Kappa=0 means adaptive/greedy are the same rule with independent model randomness. No demonstrated targeting advantage over no-focus coaching. Report records mixed runtime protocol and inferred utilities; human transfer remains untested.

@@ -1,0 +1,26 @@
+{
+  "counterpart": {
+    "cache_creation_input_tokens": 0,
+    "cache_read_input_tokens": 0,
+    "calls": 0,
+    "estimated_usd": 0.0,
+    "input_tokens": 0,
+    "output_tokens": 0
+  },
+  "global_ledger": {
+    "accounted_usd": 133.43488,
+    "actual_usd": 65.34272,
+    "limit_usd": 200.0,
+    "remaining_usd": 66.56512,
+    "requests": 2679,
+    "unresolved_requests": 9
+  },
+  "user": {
+    "cache_creation_input_tokens": 0,
+    "cache_read_input_tokens": 0,
+    "calls": 0,
+    "estimated_usd": 0.0,
+    "input_tokens": 0,
+    "output_tokens": 0
+  }
+}

@@ -104,9 +104,10 @@ Data lands in `data/sessions/` (gitignored). A visible deadline ends rehearsals 
 The current reimplementation follows [`docs/new-spec.md`](docs/new-spec.md) and
 [`docs/report.tex`](docs/report.tex). See [decision 0008](plan/decisions/0008-opportunity-beliefs-and-evaluation-contract.md)
 for their differing belief/objective definitions. The persistent API ledger enforces a
-$150 cumulative cap across calls and restarts. See [the sim3 evaluation](docs/results/sim3_evaluation.md)
-for reproducible results and limitations: tier control succeeds, but the grounded
-adaptive coach has not demonstrated improved held-out negotiation scores.
+$200 user-authorized cumulative cap across calls and restarts (new ledgers default to $150).
+See [the sim3 evaluation](docs/results/sim3_evaluation.md) for results and limitations:
+7,960 primary offline and 280 live episodes completed. Tier control succeeds; adaptive
+targeting has not demonstrated an advantage over no-focus coaching in the live cohort.
 
 ## Terminal
 

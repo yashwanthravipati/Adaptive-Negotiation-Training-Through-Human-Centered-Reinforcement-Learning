@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import argparse
 import hashlib
 import json
 from pathlib import Path
@@ -17,13 +18,16 @@ def error_only_focus(belief, costs, **kwargs):
 
 
 def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--output", type=Path, default=Path("results/sim3/validation/errors_only"))
+    args = parser.parse_args()
     root = Path("results/sim3/offline-v1")
     case = load_case(Path("results/sim3/numeric_case.json"))
     source = b"".join(p.read_bytes() for p in sorted(Path("src/negotrain").rglob("*.py")))
     experiment = evaluation.Experiment(
         case,
         "officer",
-        Path("results/sim3/validation/errors_only"),
+        args.output,
         {
             "seed": 602822,
             "users": 128,

@@ -104,7 +104,9 @@ The API gateway remains `negotrain.llm`; offline tests inject `ScriptedLLM`.
 before each request. Successful usage settles the charge; uncertain failures retain the
 reserve. SDK retries and automatic model fallback are disabled. Structured responses settle usage
 before JSON validation; a known truncation permits one separately reserved retry. The persistent cap is
-$150 across processes and restarts. The ledger and all credentials stay out of git.
+$200 for this user-authorized evaluation across processes and restarts. New ledgers
+default to $150; an explicit audited cap change preserves all existing reservations.
+Ordinary reopening preserves the persisted cap. The ledger and all credentials stay out of git.
 
 `scripts/evaluate.py` runs independent calibration, development, and test populations.
 Exact Binomial-oracle results test the mathematical model; grounded transcript results

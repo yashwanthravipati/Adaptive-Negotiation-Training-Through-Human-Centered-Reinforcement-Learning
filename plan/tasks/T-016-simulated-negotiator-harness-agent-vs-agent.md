@@ -42,3 +42,5 @@ Shared by T-017, T-018, T-021, and T-026. Use concurrent.futures for parallel ep
 - 2026-10-28: Extracted independently recoverable train_user and immediate private error logging. Recoveries preserve original sampled users, seeds, completed turns and feedback; failed users are not replaced. The live cohort remains in progress.
 
 - 2026-10-28: Added scripts/recover_user.py for auditable recovery of an inactive original user. Bounded tag-batch correction addresses missing user indices without silently accepting incomplete labels. Error-only grounded ablation (128 users) did not rescue G: adaptive gain -0.02492, CI [-0.04712,-0.00212].
+
+- 2026-10-28: Completed all 8 original LLM personas and 280 live episodes; concurrent recoveries preserved all sampled users. Final cached aggregation made zero API calls. Published paired user rows, episode diagnostics, source/runtime history and figures. Offline suite: 146 passed, 1 live test deselected; lint/format/task checks clean. Full findings in docs/results/sim3_evaluation.md.

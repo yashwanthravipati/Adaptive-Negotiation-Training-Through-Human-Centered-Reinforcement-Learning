@@ -15,19 +15,48 @@ class BudgetExceeded(RuntimeError):
 
 
 class SpendLedger:
-    def __init__(self, path: str | Path, limit: float = 150.0):
-        if not 0 < limit <= 150:
-            raise ValueError("the task's total API limit must be in (0, $150]")
+    def __init__(self, path: str | Path, limit: float | None = None):
+        initial_limit = 150.0 if limit is None else limit
+        self._validate_limit(initial_limit)
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with self._connect() as db:
             db.execute("CREATE TABLE IF NOT EXISTS budget (id INTEGER PRIMARY KEY, cap INTEGER)")
-            db.execute("INSERT OR IGNORE INTO budget VALUES (1, ?)", (self._micro(limit),))
+            db.execute("INSERT OR IGNORE INTO budget VALUES (1, ?)", (self._micro(initial_limit),))
             # A caller may lower the cap, never silently reset or raise a persisted one.
-            db.execute("UPDATE budget SET cap = MIN(cap, ?) WHERE id=1", (self._micro(limit),))
+            if limit is not None:
+                db.execute("UPDATE budget SET cap = MIN(cap, ?) WHERE id=1", (self._micro(limit),))
+            db.execute("""CREATE TABLE IF NOT EXISTS limit_changes (
+                old_cap INTEGER, new_cap INTEGER, reason TEXT,
+                created TEXT DEFAULT CURRENT_TIMESTAMP)""")
             db.execute("""CREATE TABLE IF NOT EXISTS requests (
                 id TEXT PRIMARY KEY, model TEXT, reserved INTEGER, actual INTEGER,
                 state TEXT, usage TEXT, created TEXT DEFAULT CURRENT_TIMESTAMP)""")
+
+    @staticmethod
+    def _validate_limit(limit: float) -> None:
+        if not 0 < limit <= 200:
+            raise ValueError("the task's total API limit must be in (0, $200]")
+
+    def set_authorized_limit(self, limit: float, *, reason: str) -> None:
+        """Record an explicitly authorized cap change without releasing any reservations."""
+        self._validate_limit(limit)
+        if not reason.strip():
+            raise ValueError("an authorization reason is required")
+        cap = self._micro(limit)
+        with self._connect() as db:
+            db.execute("BEGIN IMMEDIATE")
+            old_cap = db.execute("SELECT cap FROM budget WHERE id=1").fetchone()[0]
+            charged = db.execute(
+                "SELECT COALESCE(SUM(COALESCE(actual,reserved)),0) FROM requests"
+            ).fetchone()[0]
+            if cap < charged:
+                raise ValueError("limit cannot be below already accounted spending")
+            db.execute("UPDATE budget SET cap=? WHERE id=1", (cap,))
+            db.execute(
+                "INSERT INTO limit_changes (old_cap,new_cap,reason) VALUES (?,?,?)",
+                (old_cap, cap, reason),
+            )
 
     def _connect(self):
         return sqlite3.connect(self.path, timeout=60)

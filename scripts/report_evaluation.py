@@ -162,6 +162,9 @@ def api_summary(root):
         requests = db.execute(
             "SELECT model, reserved, actual, state, usage FROM requests"
         ).fetchall()
+        changes = db.execute(
+            "SELECT old_cap,new_cap,reason,created FROM limit_changes ORDER BY rowid"
+        ).fetchall()
     models = {}
     for model, reserved, actual, state, usage in requests:
         entry = models.setdefault(
@@ -190,9 +193,19 @@ def api_summary(root):
             "limit_usd": cap,
             "known_usage_usd": known,
             "unresolved_upper_bound_usd": unknown,
-            "conservative_total_usd": known + unknown,
+            "conservative_total_usd": sum(r[2] if r[2] is not None else r[1] for r in requests)
+            / 1e6,
             "requests": len(requests),
             "unresolved_requests": sum(r[2] is None for r in requests),
+            "limit_changes": [
+                {
+                    "old_limit_usd": old / 1e6,
+                    "new_limit_usd": new / 1e6,
+                    "reason": reason,
+                    "utc": created,
+                }
+                for old, new, reason, created in changes
+            ],
             "models": models,
             "scope": "Entire project ledger, including pilot and failed calls",
         },

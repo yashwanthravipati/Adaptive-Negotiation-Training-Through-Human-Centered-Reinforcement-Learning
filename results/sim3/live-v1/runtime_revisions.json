@@ -1,0 +1,4 @@
+[
+{"note": "Preserve existing episodes; account before SDK JSON validation and raise dialogue/persona token limits after truncated outputs. Reduce concurrency to four; retain all earlier unknown-cost reservations.", "source_sha256": "74898b4a5bcd1b6f182d0ed90d09ec936601f9d74b151b45561dddec67bfb811", "utc": "2026-10-28T04:23:02.500524+00:00", "workers": 4},
+{"note": "Aggregate all 280 completed saved episodes after concurrent recovery, annotation validation and explicit system caching; preserve sampled personas and original seeds. User authorized cumulative cap increase to $200.", "source_sha256": "48a56264a293b19c33a030bd8d13a955c229c3e182d7b55a2c718d943643af18", "utc": "2026-10-28T05:15:03.934612+00:00", "workers": 1}
+]

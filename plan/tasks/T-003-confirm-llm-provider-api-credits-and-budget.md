@@ -45,3 +45,5 @@ Decision 0001 proposes Claude through negotrain.llm. HW0 may have used another p
 - 2026-10-28: Live structured-response failures exposed SDK validation before usage accounting. The gateway now reads and settles raw provider usage before parsing generated JSON, with one explicitly budgeted retry for known truncation. Raised dialogue/persona output limits; preserved all earlier uncertain reservations and recorded the runtime revision. Cohort resumed from saved turns.
 
 - 2026-10-28: Added explicit system-prompt caching and bounded waiting for live reservations to settle. The cap is never raised, and uncertain/stale reservations are never released by waiting. Added a concurrency regression for this distinction.
+
+- 2026-10-28: User explicitly raised the cumulative cap to $200. Added audited cap amendment and restart-preservation regression, retaining all unknown charges. Final 2679 requests: known usage $65.34272, unresolved upper bound $68.09216 (9 requests), conservative total $133.43488; no active requests. Confirmed 4036684 cache-read input tokens. API accounting in results/sim3/api_usage.json.

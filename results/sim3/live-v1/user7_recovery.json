@@ -1,0 +1,5 @@
+{
+  "reason": "Recover inactive failed user without resampling; cache fixed role prompts and wait for live budget reservations to settle.",
+  "source_sha256": "095ddb9bd0a6ddb915251f02e9074d1b1ab36c9abff2f11a4283285f620d2927",
+  "user": 7
+}

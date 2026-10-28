@@ -1,0 +1,49 @@
+{
+  "conservative_total_usd": 133.43488,
+  "known_usage_usd": 65.34272,
+  "limit_changes": [
+    {
+      "new_limit_usd": 200.0,
+      "old_limit_usd": 150.0,
+      "reason": "2026-10-28: User explicitly instructed: Bump cap to $200; sim3 Anthropic evaluation remains authorized.",
+      "utc": "2026-10-28 05:14:52"
+    }
+  ],
+  "limit_usd": 200.0,
+  "models": {
+    "claude-opus-5-5": {
+      "known_micro_usd": 34004510,
+      "known_tokens": {
+        "cache_creation_input_tokens": 4724372,
+        "cache_read_input_tokens": 1250063,
+        "input_tokens": 5092,
+        "output_tokens": 505602
+      },
+      "requests": 1281,
+      "states": {
+        "completed": 1273,
+        "uncertain": 8
+      },
+      "unresolved_bound_micro_usd": 64081920
+    },
+    "claude-sonnet-5-5": {
+      "known_micro_usd": 31338210,
+      "known_tokens": {
+        "cache_creation_input_tokens": 10216433,
+        "cache_read_input_tokens": 2786621,
+        "input_tokens": 5588,
+        "output_tokens": 550684
+      },
+      "requests": 1398,
+      "states": {
+        "completed": 1397,
+        "uncertain": 1
+      },
+      "unresolved_bound_micro_usd": 4010240
+    }
+  },
+  "requests": 2679,
+  "scope": "Entire project ledger, including pilot and failed calls",
+  "unresolved_requests": 9,
+  "unresolved_upper_bound_usd": 68.09216
+}

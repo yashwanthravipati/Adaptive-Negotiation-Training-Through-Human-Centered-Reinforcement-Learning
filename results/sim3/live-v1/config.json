@@ -1,0 +1,33 @@
+{
+  "K": 5,
+  "calibration_from": "results/sim3/offline-v1",
+  "calibration_users": 8,
+  "case_sha256": "f1a6c1f43257775d8fa271d29faafb794b5c16d9744ff94afc6f8a11f4fd42b9",
+  "counterpart_model": "claude-opus-5-5",
+  "development_users": 64,
+  "live": true,
+  "oracle_users": 512,
+  "probe_tiers": [
+    1,
+    3,
+    5
+  ],
+  "recovery_users": 64,
+  "reference_sessions": 30,
+  "reward": "surplus_share",
+  "role": "officer",
+  "scoring": "inferred sim3 utilities",
+  "seed": 2822,
+  "source_sha256": "4ef05d944610e252cc3af9a0d377b56a94f7aab20955fadab7b5c7e0b29b49b8",
+  "steering_users": 32,
+  "training_tiers": [
+    2,
+    2,
+    4,
+    4,
+    4
+  ],
+  "user_model": "claude-sonnet-5-5",
+  "users": 8,
+  "workers": 8
+}

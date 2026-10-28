@@ -11,7 +11,11 @@ negotiation score in the grounded scripted population: mean gain −0.0059, 95% 
 interval [−0.0163, 0.0046]. Abstract Binomial learning experiments improve their own
 true-state error-cost objective. These objectives and populations must not be conflated.
 
-The live Anthropic cohort is being completed; its results will be recorded separately.
+All eight live Anthropic personas completed 280 episodes. Adaptive practice improved
+held-out G by 0.0871 [0.0606, 0.1117], but its advantage over the no-focus coaching
+control was only 0.0085 [−0.0303, 0.0436]. Thus this exploratory cohort does **not**
+establish an advantage from adaptive targeting. It does show a positive paired difference
+against random focus, under the limitations below.
 
 ![Evaluation](../../results/sim3/evaluation.svg)
 
@@ -49,7 +53,7 @@ The private manifest records source hashes; each experiment records its case/sou
 | Grounded recovery | 64 | Five sessions, then 30 independent reference sessions |
 | Grounded learning | 128 | Four policies, five rehearsals each |
 | Utility sensitivity | 64 per variant | Four alternative inferred score tables |
-| Live LLM test | 8 planned | Same four-policy training/probe design |
+| Live LLM test | 8 completed | Same four-policy training/probe design; 280 episodes |
 
 Random errors, awareness and rapport start from Beta(2,2). Each error response δ has a
 15% mass at zero; otherwise it is uniform on [0.2,0.65]. For scripted learners, a focused
@@ -184,6 +188,60 @@ There is no demonstrated adaptive gain under these changes, and one variant is h
 These are exploratory, unadjusted intervals; they do not cover every plausible scoring
 model or establish robustness beyond the tested perturbations.
 
+## Live LLM personas
+
+All eight originally sampled users finished all four policies: 24 shared baseline probes,
+160 training episodes and 96 post-training probes. None were replaced after a failed
+request. Opus 5.5 supplies counterpart dialogue and coaching; Sonnet 5.5 supplies user
+dialogue and annotations. Numeric counterpart actions remain code controlled, and
+counterfactual rollouts use the free rule-based simulator with M=4 and at most three
+critical turns. There were zero schedule violations across all 280 live episodes.
+Baseline mean R fell from 0.506 at tier 1 to 0.438 at tier 3 and 0.199 at tier 5
+(Spearman −1); each policy's 40 training episodes had 100% agreement.
+
+| Policy | Baseline G | Final G | G gain | 95% interval for gain |
+| --- | ---: | ---: | ---: | --- |
+| Adaptive (κ=0) | 0.38068 | 0.46780 | 0.08712 | [0.06061, 0.11174] |
+| Greedy | 0.38068 | 0.44792 | 0.06723 | [0.03693, 0.09754] |
+| Random focus | 0.38068 | 0.43561 | 0.05492 | [0.02652, 0.08428] |
+| No focus | 0.38068 | 0.45928 | 0.07860 | [0.04640, 0.12027] |
+
+Adaptive minus random gain is 0.03220 [0.01799, 0.04830]; adaptive minus no focus is
+0.00852 [−0.03030, 0.04356]. Adaptive minus greedy is 0.01989 [−0.00189, 0.04072].
+Because κ=0, the latter compares two stochastic runs of the same selection rule; it
+cannot support an uncertainty-bonus benefit. These are exploratory, unadjusted comparisons
+with only eight independent personas. The no-focus group also receives coaching, so the
+positive before/after gains cannot isolate coaching from practice, model variation or
+retained feedback. They do not measure human learning or generalization to another case.
+
+The live cohort resumed from saved turns after API/structured-output failures. Output
+bounds, explicit system-prefix caching and annotation correction were repaired during the
+run; source hashes and recovery records preserve this history. No saved completed episodes
+were regenerated or personas resampled. This mixed runtime history is an additional
+limitation, not a clean fixed-version replication. The final aggregation reused all saved
+episodes and feedback and made zero API calls.
+
+Numeric [policy results](../../results/sim3/live-v1/training.json),
+[paired user rows](../../results/sim3/live-v1/training_rows.json), and
+[episode diagnostics](../../results/sim3/live-v1/sessions.json) are public. Source materials,
+private briefs, full dialogue and coaching text remain in ignored local files.
+
+## Token caching and final cost
+
+The gateway uses automatic message caching and an explicit ephemeral breakpoint on the
+stable system prompt. The latter was added during recovery; earlier episodes used only
+automatic caching. Provider usage confirms **4,036,684 cache-read input tokens**:
+1,250,063 Opus and 2,786,621 Sonnet. Cache writes and reads are charged at their respective
+rates and included in the ledger; enabling caching does not imply every prompt hits.
+
+Across 2,679 requests, including pilot, failed and recovery calls, known token usage cost
+is **$65.34272**. Nine earlier uncertain requests retain their entire **$68.09216** reserved
+upper bound, giving a conservative total of **$133.43488**. This is not a claim that those
+unknown requests were billed at their full bound. No active requests remain. The user
+explicitly increased the cumulative cap from $150 to **$200** on 2026-10-28; the audited
+change preserves all previous charges and reservations across process restarts. See the
+complete [API and cache accounting](../../results/sim3/api_usage.json).
+
 ## Counterfactual validity
 
 Twelve independent steering sessions supplied 26 critical-turn estimates. Compared with
@@ -199,20 +257,31 @@ an exploratory latency/cost choice rather than a precision guarantee.
 
 ## Reproduction
 
-Run from the project directory with the existing virtual environment. No API calls occur
-in the first three commands. Exact original case/source hashes require the private case;
-the numeric surrogate gives reproducible offline economics under a different case hash.
+Run from the project directory with the existing virtual environment. These commands make
+no API calls. The public numeric surrogate reproduces offline economics under a different
+case hash and generates fresh local raw artifacts for the subsequent diagnostics:
 
 ```bash
 python scripts/evaluate.py --case results/sim3/numeric_case.json \
   --output results/sim3/reproduction --users 128 --calibration-users 8 \
   --steering-users 32 --recovery-users 64 --reference-sessions 30 \
   --oracle-users 512 --development-users 64
-python scripts/validate_evaluation.py
-python scripts/oracle_action_space.py
-python scripts/ablate_focus_space.py
-python scripts/report_evaluation.py
+python scripts/validate_evaluation.py --case results/sim3/numeric_case.json \
+  --input results/sim3/reproduction --output results/sim3/reproduction-validation
 ```
+
+The oracle and error-only diagnostic use the committed public calibration/numeric inputs.
+Choose a new output directory when source code changes; existing experiments retain their
+original configuration hashes.
+
+```bash
+python scripts/oracle_action_space.py
+python scripts/ablate_focus_space.py --output results/sim3/reproduction-errors-only
+```
+
+`python scripts/report_evaluation.py` regenerates the original figures and episode
+summaries. It requires the private case and ignored raw artifacts, which are deliberately
+absent from a public checkout. Exact original case/source hashes also require that case.
 
 The live command sends the private fictional role material to Anthropic and costs money;
 the user explicitly authorized it for this evaluation:
@@ -222,7 +291,9 @@ python scripts/evaluate.py --live --stage training --users 8 --workers 4 \
   --calibration-from results/sim3/offline-v1 --output results/sim3/live-v1
 ```
 
-Full-context reservations in `.api-budget.sqlite3` enforce the cumulative $150 cap. Never
+Full-context reservations in `.api-budget.sqlite3` enforce the current cumulative $200 cap.
+New ledgers default to $150; an explicit, recorded `set_authorized_limit` changes the cap.
+Opening an existing ledger preserves its cap; request reservations cannot raise it. Never
 delete/reset the ledger to resume. Raw private transcripts are checkpointed after every
 turn in ignored `raw/` directories. Public outputs contain numeric observations, seeds,
 configuration, model names and source hashes. Runtime repairs are recorded in

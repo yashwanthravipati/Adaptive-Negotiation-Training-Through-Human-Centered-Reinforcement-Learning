@@ -1,0 +1,5 @@
+{
+  "reason": "Continue failed sampled user independently; explicit system prompt caching, saved prefix and all original experimental parameters preserved.",
+  "source_sha256": "41f1d29400ce973a33e33d38a85b94f8b84d0a660c0a1552f59aafc9a96d74a1",
+  "user": 3
+}
