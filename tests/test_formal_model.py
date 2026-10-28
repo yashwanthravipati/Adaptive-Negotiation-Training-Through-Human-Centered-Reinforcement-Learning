@@ -193,9 +193,19 @@ def test_tagger_is_role_scoped_and_validates_before_mutation(tiny):
     assert "COUNTERPART SECRET" not in str(llm.calls)
     bad = ScriptedLLM(
         [{"turns": [{"index": 0, "fact_ids": ["bogus"], "raised_issues": [], "rapport": False}]}]
+        * 2
     )
     with pytest.raises(ValueError):
         tag_session(s, tiny, bad)
+    assert s.turns[0].tags.rapport
+    corrected = ScriptedLLM(
+        [
+            {"turns": []},
+            {"turns": [{"index": 0, "fact_ids": [], "raised_issues": ["x"], "rapport": True}]},
+        ]
+    )
+    tag_session(s, tiny, corrected)
+    assert len(corrected.calls) == 2
     assert s.turns[0].tags.rapport
 
 

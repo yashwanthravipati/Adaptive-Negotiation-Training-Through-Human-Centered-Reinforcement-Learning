@@ -157,6 +157,16 @@ No error-only oracle user reached the all-six-errors-below-0.25 threshold within
 rehearsals. Sessions-to-threshold is right-censored at 6 for all users; therefore this
 study provides no evidence for faster complete mastery under that demanding endpoint.
 
+### Diagnostic: error-only action space
+
+An exploratory ablation keeps the same 128 users, costs, tuning and tier schedule but
+restricts practice targets to the six errors. Adaptive G gain is −0.02492
+[−0.04712, −0.00212], and adaptive minus random is −0.03829
+[−0.06031, −0.01663]. This does not rescue competence gain: fact-focused attention alone
+is not an adequate explanation. The scripted learning transitions and counterfactual
+costs do not reliably align error reduction with terminal negotiation return. These are
+unadjusted diagnostic comparisons, not a new tuned production policy.
+
 ### Sensitivity to inferred economics
 
 Costs and tuning remain fixed at primary calibration; 64 matched users per variant.
@@ -200,6 +210,7 @@ python scripts/evaluate.py --case results/sim3/numeric_case.json \
   --oracle-users 512 --development-users 64
 python scripts/validate_evaluation.py
 python scripts/oracle_action_space.py
+python scripts/ablate_focus_space.py
 python scripts/report_evaluation.py
 ```
 
@@ -218,6 +229,10 @@ configuration, model names and source hashes. Runtime repairs are recorded in
 `live-v1/runtime_revisions.json`; an explicit `--resume-note` is required to preserve an
 existing cohort across a source-code change. SDK retries/model fallback are disabled;
 one separately reserved retry is allowed for a known truncated structured response.
+An incomplete annotation batch gets one correction attempt before failing; labels are
+applied atomically only after all supplied user indices and fact/issue IDs validate.
+`api_usage.json` aggregates the entire durable ledger, including pilot, restart and failed
+requests; individual `usage.json` files describe their own process only.
 
 ## What remains unestablished
 

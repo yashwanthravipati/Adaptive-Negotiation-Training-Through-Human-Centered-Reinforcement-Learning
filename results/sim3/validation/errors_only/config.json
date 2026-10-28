@@ -1,0 +1,31 @@
+{
+  "K": 5,
+  "action_space": [
+    "error:1",
+    "error:2",
+    "error:3",
+    "error:4",
+    "error:5",
+    "error:6"
+  ],
+  "calibration": "Primary costs and tuning held fixed; exploratory diagnostic",
+  "case_sha256": "f05e8ab0dad7ac7ff1417ddc8bfecf6514d5aec3cfb3eb6aa82123adb658616e",
+  "probe_tiers": [
+    1,
+    3,
+    5
+  ],
+  "reward": "surplus_share",
+  "role": "officer",
+  "scoring": "inferred sim3 utilities",
+  "seed": 602822,
+  "source_sha256": "064092a01a756e413dbad80f48e05ecfeb0010174b7936e063e0ef161409d9b8",
+  "training_tiers": [
+    2,
+    2,
+    4,
+    4,
+    4
+  ],
+  "users": 128
+}

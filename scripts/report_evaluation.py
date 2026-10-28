@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import sqlite3
 from pathlib import Path
 
 import matplotlib
@@ -152,6 +153,52 @@ def figures(root):
     plt.close(fig)
 
 
+def api_summary(root):
+    ledger = Path(".api-budget.sqlite3")
+    if not ledger.exists():
+        return
+    with sqlite3.connect(ledger) as db:
+        cap = db.execute("SELECT cap FROM budget WHERE id=1").fetchone()[0] / 1e6
+        requests = db.execute(
+            "SELECT model, reserved, actual, state, usage FROM requests"
+        ).fetchall()
+    models = {}
+    for model, reserved, actual, state, usage in requests:
+        entry = models.setdefault(
+            model,
+            {
+                "requests": 0,
+                "known_micro_usd": 0,
+                "unresolved_bound_micro_usd": 0,
+                "states": {},
+                "known_tokens": {},
+            },
+        )
+        entry["requests"] += 1
+        entry["known_micro_usd"] += actual or 0
+        entry["unresolved_bound_micro_usd"] += reserved if actual is None else 0
+        entry["states"][state] = entry["states"].get(state, 0) + 1
+        if actual is not None:
+            for key, value in json.loads(usage).items():
+                if key.endswith("tokens"):
+                    entry["known_tokens"][key] = entry["known_tokens"].get(key, 0) + value
+    known = sum(r[2] or 0 for r in requests) / 1e6
+    unknown = sum(r[1] for r in requests if r[2] is None) / 1e6
+    write_json(
+        root / "api_usage.json",
+        {
+            "limit_usd": cap,
+            "known_usage_usd": known,
+            "unresolved_upper_bound_usd": unknown,
+            "conservative_total_usd": known + unknown,
+            "requests": len(requests),
+            "unresolved_requests": sum(r[2] is None for r in requests),
+            "models": models,
+            "scope": "Entire project ledger, including pilot and failed calls",
+        },
+    )
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--case", type=Path, default=Path("data/cases/private/sim3_inferred.json"))
@@ -169,6 +216,7 @@ def main():
                 "schedule violations",
             )
     figures(args.root)
+    api_summary(args.root)
 
 
 if __name__ == "__main__":

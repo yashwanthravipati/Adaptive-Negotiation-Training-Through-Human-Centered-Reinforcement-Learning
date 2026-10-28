@@ -72,7 +72,8 @@ calibration, fallback cost/opportunity values are unit priors, not measured esti
 The planner chooses maximum w*o_bar*(mean+kappa*sd), using 1-mean for facts and rapport.
 Greedy, seeded random, and no-focus alternatives use the same interface. The app displays
 probabilities, credible intervals, and opportunity counts, and includes a focus callout
-in preparation. The old six heuristic skill scores are removed. Behavioral summary
+in preparation. All five preparation-plan steps carry the current focus; the final
+step also adapts tier. The old six heuristic skill scores are removed. Behavioral summary
 features remain available for descriptive outcome and sim-to-real comparisons.
 
 ## Counterfactual feedback

@@ -21,4 +21,4 @@ Synthetic recovery: simulated users with injected traits, 5 sessions each; does 
 
 ## Log
 
-- 2026-10-28: Evaluated 64 grounded users with 5 training and 30 reference sessions each, all 27 state components, AUC and split-half diagnostics; separately 512 exact Binomial oracle users. Error-2 MC-reference coverage only65.6%; no claim of uniformly calibrated inference. See docs/results/profiling.md. Human label agreement and prediction remain pending.
+- 2026-10-28: Evaluated 64 grounded users with 5 training and 30 reference sessions each, all 27 state components, AUC and split-half diagnostics; separately 512 exact Binomial oracle users. Error-2 MC-reference coverage only 65.6%; no claim of uniformly calibrated inference. See docs/results/profiling.md. Human label agreement and prediction remain pending.

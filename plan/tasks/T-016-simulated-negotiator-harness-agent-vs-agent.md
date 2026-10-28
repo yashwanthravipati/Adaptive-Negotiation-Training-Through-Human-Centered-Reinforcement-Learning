@@ -40,3 +40,5 @@ Shared by T-017, T-018, T-021, and T-026. Use concurrent.futures for parallel ep
   human transfer remain unmeasured.
 
 - 2026-10-28: Extracted independently recoverable train_user and immediate private error logging. Recoveries preserve original sampled users, seeds, completed turns and feedback; failed users are not replaced. The live cohort remains in progress.
+
+- 2026-10-28: Added scripts/recover_user.py for auditable recovery of an inactive original user. Bounded tag-batch correction addresses missing user indices without silently accepting incomplete labels. Error-only grounded ablation (128 users) did not rescue G: adaptive gain -0.02492, CI [-0.04712,-0.00212].

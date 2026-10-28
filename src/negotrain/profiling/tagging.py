@@ -39,22 +39,34 @@ class TagBatch(BaseModel):
 def tag_session(session: Session, case: Case, llm: LLM) -> None:
     """Apply one validated batch atomically; no hidden counterpart sheet enters the prompt."""
     facts = case_facts(case, session.user_role_id)
+    expected = {t.index for t in session.turns if t.speaker == "user"}
     payload = {
+        "expected_user_turn_indices": sorted(expected),
         "own_role": case.role(session.user_role_id).model_dump(),
         "facts": [f.model_dump() for f in facts],
         "issues": [{"id": i.id, "name": i.name} for i in case.issues],
         "turns": [{"index": t.index, "speaker": t.speaker, "text": t.text} for t in session.turns],
     }
-    result = llm.parse(
-        RUBRIC, [{"role": "user", "content": json.dumps(payload)}], TagBatch, max_tokens=4096
-    )
-    expected = {t.index for t in session.turns if t.speaker == "user"}
-    if {t.index for t in result.turns} != expected or len(result.turns) != len(expected):
-        raise ValueError("tagger must annotate each user turn exactly once")
     fact_ids = {f.id for f in facts if f.kind != "walkaway"}
     issues = {i.id for i in case.issues}
-    if any(set(t.fact_ids) - fact_ids or set(t.raised_issues) - issues for t in result.turns):
-        raise ValueError("tagger returned an unknown fact or issue")
+    messages = [{"role": "user", "content": json.dumps(payload)}]
+    for attempt in range(2):
+        result = llm.parse(RUBRIC, messages, TagBatch, max_tokens=4096 * (attempt + 1))
+        error = None
+        if {t.index for t in result.turns} != expected or len(result.turns) != len(expected):
+            error = f"Annotate exactly these user indices, once each: {sorted(expected)}."
+        elif any(set(t.fact_ids) - fact_ids or set(t.raised_issues) - issues for t in result.turns):
+            error = "Use only supplied fact/issue IDs; do not label the own-walkaway fact."
+        if error is None:
+            break
+        if attempt:
+            raise ValueError("tagger returned an invalid batch: " + error)
+        messages.extend(
+            [
+                {"role": "assistant", "content": result.model_dump_json()},
+                {"role": "user", "content": error + " Return the complete corrected batch."},
+            ]
+        )
     for tagged in result.turns:
         session.turns[tagged.index].tags = TurnTags(
             fact_ids=tagged.fact_ids,

@@ -31,3 +31,5 @@ Start rule-based: for example, an early conceder faces high-anchoring, slow-conc
   explicit hindsight labels, focus-first prep/feedback and personal credit fed into UCB.
   131 offline tests passed, including randomized walk-away invariants and a noisy ranking
   reversal test. API spend remains $0. Population calibration and sim3 evaluation pending.
+
+- 2026-10-28: Preparation now shows five sessions and passes the displayed belief-selected focus and dial overrides into every rehearsal step. The final step also adapts tier; the study fixes tiers separately.

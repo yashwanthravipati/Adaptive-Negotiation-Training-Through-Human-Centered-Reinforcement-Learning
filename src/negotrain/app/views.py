@@ -470,13 +470,10 @@ def page_setup() -> None:
 
 
 TRAINING_PLAN = [
-    (2, "Warm-up", "A cooperative counterpart: practice your opening and asking questions."),
-    (3, "Realistic", "A guarded counterpart: practice packaging trades across issues."),
-    (
-        4,
-        "Tough",
-        "A hard-anchoring counterpart: practice holding your ground and conceding slowly.",
-    ),
+    (2, "Warm-up", "Practice your opening and ask about the other side's interests."),
+    (2, "Consolidate", "Apply the last report's advice in another moderate rehearsal."),
+    (4, "Stretch", "Practice packaging trades against a firmer counterpart."),
+    (4, "Repeat under pressure", "Hold your ground and check reciprocity before conceding."),
 ]
 
 
@@ -587,7 +584,8 @@ def _training_plan(p: Participant, case: Case, role_id: str) -> None:
     st.subheader("Training plan for this scenario")
     st.caption(
         "Rehearse this exact case against counterparts of increasing difficulty, then check "
-        "the Feedback page after each one. The last step adapts to your profile."
+        "the Feedback page after each one. This five-session plan updates its focus from "
+        "your profile; the final step also adapts the difficulty."
     )
     hist = history(p.id)
     done: dict[int, int] = {}
@@ -603,7 +601,14 @@ def _training_plan(p: Participant, case: Case, role_id: str) -> None:
     spec = next_scenario(current_profile(p.id, hist), hist, [case.id])
     st.info("Practice focus: " + focus_callout(spec.focus))
     steps = [
-        ScenarioSpec(tier=t, case_id=case.id, rationale=f"{title}: {why}")
+        ScenarioSpec(
+            tier=t,
+            case_id=case.id,
+            focus=spec.focus,
+            focus_issue=spec.focus_issue,
+            dial_overrides=spec.dial_overrides,
+            rationale=f"{title}: {why}",
+        )
         for t, title, why in TRAINING_PLAN
     ]
     steps.append(spec.model_copy(update={"rationale": f"Recommended for you: {spec.rationale}"}))
@@ -615,7 +620,7 @@ def _training_plan(p: Participant, case: Case, role_id: str) -> None:
                 st.markdown(f"**{n + 1}. {title}**")
                 chips = [(f"Tier {step.tier} · {TIERS[step.tier].name}", "")]
                 if done.get(step.tier):
-                    chips.append((f"✓ done {done[step.tier]}×", "green"))
+                    chips.append((f"{done[step.tier]} prior sessions at this tier", "green"))
                 style.chips(chips)
                 st.caption(md(why))
             if right.button("Start", key=f"plan_{n}", width="stretch", type="primary"):
