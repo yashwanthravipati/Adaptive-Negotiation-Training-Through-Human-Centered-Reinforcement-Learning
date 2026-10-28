@@ -140,8 +140,9 @@ No focus & 0.0786 \\
 \end{center}
 The mean $G$ gain of the adaptive policy minus that of the random one was $0.0322$,
 but that of adaptive minus that of no focus was $0.0085$.
-Development selected uncertainty bonus $\kappa=0$,
-so adaptive and greedy use the same rule; their live differences reflect model randomness.
+Note that during our development, we tentatively selected an uncertainty bonus of
+$\kappa=0$ because it gave the largest reduction in simulated error cost, so adaptive
+and greedy used the same selection rule, and their differences here reflect model randomness.
 
 \paragraph{Next steps.}
 We plan to keep the formalism, which gives us a consistent way to describe the user,
