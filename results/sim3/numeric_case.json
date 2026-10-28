@@ -1,0 +1,205 @@
+{
+  "id": "sim3_inferred",
+  "issues": [
+    {
+      "description": "",
+      "id": "registration",
+      "name": "Issue 1",
+      "options": [
+        {
+          "id": "registration_0",
+          "label": "Option 1"
+        },
+        {
+          "id": "registration_1",
+          "label": "Option 2"
+        },
+        {
+          "id": "registration_2",
+          "label": "Option 3"
+        }
+      ]
+    },
+    {
+      "description": "",
+      "id": "timeline",
+      "name": "Issue 2",
+      "options": [
+        {
+          "id": "timeline_0",
+          "label": "Option 1"
+        },
+        {
+          "id": "timeline_1",
+          "label": "Option 2"
+        },
+        {
+          "id": "timeline_2",
+          "label": "Option 3"
+        }
+      ]
+    },
+    {
+      "description": "",
+      "id": "welfare",
+      "name": "Issue 3",
+      "options": [
+        {
+          "id": "welfare_0",
+          "label": "Option 1"
+        },
+        {
+          "id": "welfare_1",
+          "label": "Option 2"
+        },
+        {
+          "id": "welfare_2",
+          "label": "Option 3"
+        }
+      ]
+    },
+    {
+      "description": "",
+      "id": "staffing",
+      "name": "Issue 4",
+      "options": [
+        {
+          "id": "staffing_0",
+          "label": "Option 1"
+        },
+        {
+          "id": "staffing_1",
+          "label": "Option 2"
+        },
+        {
+          "id": "staffing_2",
+          "label": "Option 3"
+        }
+      ]
+    },
+    {
+      "description": "",
+      "id": "records",
+      "name": "Issue 5",
+      "options": [
+        {
+          "id": "records_0",
+          "label": "Option 1"
+        },
+        {
+          "id": "records_1",
+          "label": "Option 2"
+        },
+        {
+          "id": "records_2",
+          "label": "Option 3"
+        }
+      ]
+    },
+    {
+      "description": "",
+      "id": "claims",
+      "name": "Issue 6",
+      "options": [
+        {
+          "id": "claims_0",
+          "label": "Option 1"
+        },
+        {
+          "id": "claims_1",
+          "label": "Option 2"
+        },
+        {
+          "id": "claims_2",
+          "label": "Option 3"
+        }
+      ]
+    }
+  ],
+  "public_brief": "Synthetic, analyst-invented utility tables only. This surrogate reproduces offline economics, not the source negotiation. Do not use it for live evaluation.",
+  "roles": [
+    {
+      "confidential_brief": "Synthetic numeric surrogate. All utilities and walk-away values were invented for a sensitivity-limited experiment.",
+      "constraints": [],
+      "id": "officer",
+      "inferred": false,
+      "name": "Role 1",
+      "points": {
+        "claims": {
+          "claims_0": 60.0,
+          "claims_1": 45.0,
+          "claims_2": 30.0
+        },
+        "records": {
+          "records_0": 80.0,
+          "records_1": 70.0,
+          "records_2": 55.0
+        },
+        "registration": {
+          "registration_0": 100.0,
+          "registration_1": 75.0,
+          "registration_2": 50.0
+        },
+        "staffing": {
+          "staffing_0": 90.0,
+          "staffing_1": 65.0,
+          "staffing_2": 40.0
+        },
+        "timeline": {
+          "timeline_0": 90.0,
+          "timeline_1": 70.0,
+          "timeline_2": 40.0
+        },
+        "welfare": {
+          "welfare_0": 30.0,
+          "welfare_1": 60.0,
+          "welfare_2": 80.0
+        }
+      },
+      "reservation_value": 270.0
+    },
+    {
+      "confidential_brief": "Synthetic numeric surrogate. All utilities and walk-away values were invented for a sensitivity-limited experiment.",
+      "constraints": [],
+      "id": "mayor",
+      "inferred": true,
+      "name": "Role 2",
+      "points": {
+        "claims": {
+          "claims_0": 20.0,
+          "claims_1": 60.0,
+          "claims_2": 80.0
+        },
+        "records": {
+          "records_0": 25.0,
+          "records_1": 90.0,
+          "records_2": 70.0
+        },
+        "registration": {
+          "registration_0": 20.0,
+          "registration_1": 75.0,
+          "registration_2": 100.0
+        },
+        "staffing": {
+          "staffing_0": 10.0,
+          "staffing_1": 60.0,
+          "staffing_2": 100.0
+        },
+        "timeline": {
+          "timeline_0": 20.0,
+          "timeline_1": 60.0,
+          "timeline_2": 90.0
+        },
+        "welfare": {
+          "welfare_0": 20.0,
+          "welfare_1": 70.0,
+          "welfare_2": 100.0
+        }
+      },
+      "reservation_value": 260.0
+    }
+  ],
+  "source": "Local projection from 28 sim3 documents. ALL utilities and both BATNAs are inferred, non-official assumptions. Officer priorities and red lines are preserved qualitatively. Mayor preferences are inferred from public materials only. Six issues discretized into three lawful implementation options each; cross-issue feasibility is simplified.",
+  "source_documents": [],
+  "title": "Anonymous numeric surrogate for inferred sim3 economics"
+}

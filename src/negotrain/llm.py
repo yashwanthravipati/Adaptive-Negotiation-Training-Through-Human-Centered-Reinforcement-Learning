@@ -30,7 +30,12 @@ from negotrain.budget import SpendLedger
 T = TypeVar("T", bound=BaseModel)
 Message = dict[str, Any]  # {"role": "user" | "assistant", "content": str}
 
+
 class LLMRefusal(RuntimeError):
+    pass
+
+
+class LLMTruncated(RuntimeError):
     pass
 
 
@@ -141,7 +146,7 @@ class ClaudeLLM:
             category = response.stop_details.category if response.stop_details else None
             raise LLMRefusal(f"model declined (category={category})")
         if response.stop_reason == "max_tokens":
-            raise RuntimeError("response hit max_tokens; raise the limit for this call")
+            raise LLMTruncated("response hit max_tokens; raise the limit for this call")
 
     def complete(self, system: str, messages: Sequence[Message], *, max_tokens: int = 16000) -> str:
         response = self._call(system, messages, max_tokens)
@@ -162,17 +167,23 @@ class ClaudeLLM:
         prices = MODEL_PRICES[self.model]
         bound = 2 * prices["input"] + max_tokens * prices["output"] / 1e6
         reservation = self.ledger.reserve(self.model, bound)
+        raw = None
         try:
             request = self._request(system, messages, max_tokens)
             if output_type is None:
                 response = self.client.beta.messages.create(**request)
             else:
-                response = self.client.beta.messages.parse(**request, output_format=output_type)
+                # Account for provider usage BEFORE Pydantic parses generated JSON.
+                # Truncated JSON can fail validation even though the request was billed.
+                raw = self.client.beta.messages.with_raw_response.parse(
+                    **request, output_format=output_type
+                )
+                response = anthropic.types.beta.BetaMessage.model_validate(raw.http_response.json())
         except Exception as error:
             self.ledger.uncertain(reservation, type(error).__name__)
             raise
         self._check(response, reservation)
-        return response
+        return raw.parse() if raw is not None else response
 
     def parse(
         self,
@@ -182,7 +193,13 @@ class ClaudeLLM:
         *,
         max_tokens: int = 16000,
     ) -> T:
-        response = self._call(system, messages, max_tokens, output_type)
+        try:
+            response = self._call(system, messages, max_tokens, output_type)
+        except LLMTruncated:
+            if max_tokens >= 64000:
+                raise
+            # One explicit retry, separately reserved and billed. No hidden SDK retry.
+            response = self._call(system, messages, min(64000, 2 * max_tokens), output_type)
         if response.parsed_output is None:
             raise RuntimeError("model returned no parseable output")
         return response.parsed_output

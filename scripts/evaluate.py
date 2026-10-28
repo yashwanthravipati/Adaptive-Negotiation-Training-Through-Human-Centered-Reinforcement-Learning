@@ -6,6 +6,7 @@ import argparse
 import fcntl
 import hashlib
 import json
+from datetime import datetime, timezone
 from pathlib import Path
 
 from negotrain.cases import load_case
@@ -31,6 +32,7 @@ def main():
     parser.add_argument("--seed", type=int, default=2822)
     parser.add_argument("--users", type=int, default=128)
     parser.add_argument("--workers", type=int, default=1)
+    parser.add_argument("--resume-note", help="Record an intentional runtime repair when resuming")
     parser.add_argument("--calibration-users", type=int, default=8)
     parser.add_argument("--steering-users", type=int, default=32)
     parser.add_argument("--recovery-users", type=int, default=64)
@@ -57,9 +59,25 @@ def main():
         config = {
             k: str(v) if isinstance(v, Path) else v
             for k, v in vars(args).items()
-            if k not in ("stage", "output", "case")
+            if k not in ("stage", "output", "case", "resume_note")
         }
         config["source_sha256"] = hashlib.sha256(source).hexdigest()
+        previous_path = args.output / "config.json"
+        if args.resume_note and previous_path.exists():
+            previous = json.loads(previous_path.read_text())
+            revisions_path = args.output / "runtime_revisions.json"
+            revisions = json.loads(revisions_path.read_text()) if revisions_path.exists() else []
+            revisions.append(
+                {
+                    "source_sha256": config["source_sha256"],
+                    "workers": args.workers,
+                    "note": args.resume_note,
+                    "utc": datetime.now(timezone.utc).isoformat(),
+                }
+            )
+            write_json(revisions_path, revisions)
+            config["source_sha256"] = previous["source_sha256"]
+            config["workers"] = previous["workers"]
         config["counterpart_model"] = "claude-opus-5-5" if args.live else "rule-based"
         config["user_model"] = "claude-sonnet-5-5" if args.live else "grounded-scripted"
         opponent = ClaudeLLM(effort="low") if args.live else None

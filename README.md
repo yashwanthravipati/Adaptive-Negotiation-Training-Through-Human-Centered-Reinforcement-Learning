@@ -80,8 +80,8 @@ only evaluate listed options; use the AI counterpart for open-ended negotiation.
 "New scenario" in the sidebar goes back to step 1.
 
 **Your assistant** stays on the right across Prepare, Rehearse, Feedback, and the other
-pages. Ask about a fact in the materials, unpack your brief, or paste a possible reply
-and ask how it might land. Chat is private to your participant, case, and role, survives
+pages. During rehearsal it clarifies facts only; before or after a session, you can also
+explore possible replies. Chat is private to your participant, case, and role, survives
 page changes/restarts, and never sends a move to the counterpart. "New chat" clears the
 conversation while keeping attached sources.
 
@@ -103,8 +103,10 @@ Data lands in `data/sessions/` (gitignored). A visible deadline ends rehearsals 
 
 The current reimplementation follows [`docs/new-spec.md`](docs/new-spec.md) and
 [`docs/report.tex`](docs/report.tex). See [decision 0008](plan/decisions/0008-opportunity-beliefs-and-evaluation-contract.md)
-for their differing belief/objective definitions. Simulation evaluation and persistent
-API budget enforcement are still being integrated; there are no new performance claims yet.
+for their differing belief/objective definitions. The persistent API ledger enforces a
+$150 cumulative cap across calls and restarts. See [the sim3 evaluation](docs/results/sim3_evaluation.md)
+for reproducible results and limitations: tier control succeeds, but the grounded
+adaptive coach has not demonstrated improved held-out negotiation scores.
 
 ## Terminal
 

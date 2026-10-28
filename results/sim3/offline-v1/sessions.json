@@ -1,0 +1,493 @@
+{
+  "baseline_tier_spearman": -1.0,
+  "baseline_tiers": {
+    "1": {
+      "ci95": [
+        0.5378107244318182,
+        0.5981889204545454
+      ],
+      "mean": 0.5672940340909091,
+      "n": 128
+    },
+    "3": {
+      "ci95": [
+        0.31160333806818175,
+        0.3931107954545454
+      ],
+      "mean": 0.3520951704545454,
+      "n": 128
+    },
+    "5": {
+      "ci95": [
+        0.17560369318181818,
+        0.19531249999999997
+      ],
+      "mean": 0.18359374999999994,
+      "n": 128
+    }
+  },
+  "completed_sessions": 7960,
+  "schedule_violations": 0,
+  "training_by_policy": {
+    "greedy": {
+      "agreement_rate": 1.0,
+      "counts": {
+        "error:1": {
+          "o": 753,
+          "x": 184
+        },
+        "error:2": {
+          "o": 481,
+          "x": 30
+        },
+        "error:3": {
+          "o": 232,
+          "x": 116
+        },
+        "error:4": {
+          "o": 463,
+          "x": 103
+        },
+        "error:5": {
+          "o": 3840,
+          "x": 1838
+        },
+        "error:6": {
+          "o": 2522,
+          "x": 557
+        },
+        "fact:sim3_inferred:officer:alternative": {
+          "o": 2985,
+          "x": 1975
+        },
+        "fact:sim3_inferred:officer:other_priority:claims": {
+          "o": 2985,
+          "x": 819
+        },
+        "fact:sim3_inferred:officer:other_priority:records": {
+          "o": 2985,
+          "x": 879
+        },
+        "fact:sim3_inferred:officer:other_priority:registration": {
+          "o": 2985,
+          "x": 788
+        },
+        "fact:sim3_inferred:officer:other_priority:staffing": {
+          "o": 2985,
+          "x": 859
+        },
+        "fact:sim3_inferred:officer:other_priority:timeline": {
+          "o": 2985,
+          "x": 969
+        },
+        "fact:sim3_inferred:officer:other_priority:welfare": {
+          "o": 2985,
+          "x": 1016
+        },
+        "fact:sim3_inferred:officer:own_priority:claims": {
+          "o": 2985,
+          "x": 827
+        },
+        "fact:sim3_inferred:officer:own_priority:records": {
+          "o": 2985,
+          "x": 842
+        },
+        "fact:sim3_inferred:officer:own_priority:registration": {
+          "o": 2985,
+          "x": 795
+        },
+        "fact:sim3_inferred:officer:own_priority:staffing": {
+          "o": 2985,
+          "x": 856
+        },
+        "fact:sim3_inferred:officer:own_priority:timeline": {
+          "o": 2985,
+          "x": 950
+        },
+        "fact:sim3_inferred:officer:own_priority:welfare": {
+          "o": 2985,
+          "x": 995
+        },
+        "fact:sim3_inferred:officer:tradeable:claims": {
+          "o": 2985,
+          "x": 778
+        },
+        "fact:sim3_inferred:officer:tradeable:records": {
+          "o": 2985,
+          "x": 818
+        },
+        "fact:sim3_inferred:officer:tradeable:registration": {
+          "o": 2985,
+          "x": 795
+        },
+        "fact:sim3_inferred:officer:tradeable:staffing": {
+          "o": 2985,
+          "x": 780
+        },
+        "fact:sim3_inferred:officer:tradeable:timeline": {
+          "o": 2985,
+          "x": 881
+        },
+        "fact:sim3_inferred:officer:tradeable:welfare": {
+          "o": 2985,
+          "x": 919
+        },
+        "fact:sim3_inferred:officer:walkaway": {
+          "o": 2985,
+          "x": 2985
+        },
+        "rapport": {
+          "o": 2985,
+          "x": 2633
+        }
+      },
+      "episodes": 640,
+      "mean_R": 0.36740056818181815
+    },
+    "none": {
+      "agreement_rate": 1.0,
+      "counts": {
+        "error:1": {
+          "o": 722,
+          "x": 185
+        },
+        "error:2": {
+          "o": 461,
+          "x": 28
+        },
+        "error:3": {
+          "o": 221,
+          "x": 111
+        },
+        "error:4": {
+          "o": 467,
+          "x": 117
+        },
+        "error:5": {
+          "o": 3840,
+          "x": 1934
+        },
+        "error:6": {
+          "o": 2371,
+          "x": 544
+        },
+        "fact:sim3_inferred:officer:alternative": {
+          "o": 2838,
+          "x": 1401
+        },
+        "fact:sim3_inferred:officer:other_priority:claims": {
+          "o": 2838,
+          "x": 573
+        },
+        "fact:sim3_inferred:officer:other_priority:records": {
+          "o": 2838,
+          "x": 597
+        },
+        "fact:sim3_inferred:officer:other_priority:registration": {
+          "o": 2838,
+          "x": 508
+        },
+        "fact:sim3_inferred:officer:other_priority:staffing": {
+          "o": 2838,
+          "x": 561
+        },
+        "fact:sim3_inferred:officer:other_priority:timeline": {
+          "o": 2838,
+          "x": 653
+        },
+        "fact:sim3_inferred:officer:other_priority:welfare": {
+          "o": 2838,
+          "x": 712
+        },
+        "fact:sim3_inferred:officer:own_priority:claims": {
+          "o": 2838,
+          "x": 568
+        },
+        "fact:sim3_inferred:officer:own_priority:records": {
+          "o": 2838,
+          "x": 570
+        },
+        "fact:sim3_inferred:officer:own_priority:registration": {
+          "o": 2838,
+          "x": 513
+        },
+        "fact:sim3_inferred:officer:own_priority:staffing": {
+          "o": 2838,
+          "x": 558
+        },
+        "fact:sim3_inferred:officer:own_priority:timeline": {
+          "o": 2838,
+          "x": 627
+        },
+        "fact:sim3_inferred:officer:own_priority:welfare": {
+          "o": 2838,
+          "x": 683
+        },
+        "fact:sim3_inferred:officer:tradeable:claims": {
+          "o": 2838,
+          "x": 540
+        },
+        "fact:sim3_inferred:officer:tradeable:records": {
+          "o": 2838,
+          "x": 542
+        },
+        "fact:sim3_inferred:officer:tradeable:registration": {
+          "o": 2838,
+          "x": 528
+        },
+        "fact:sim3_inferred:officer:tradeable:staffing": {
+          "o": 2838,
+          "x": 541
+        },
+        "fact:sim3_inferred:officer:tradeable:timeline": {
+          "o": 2838,
+          "x": 579
+        },
+        "fact:sim3_inferred:officer:tradeable:welfare": {
+          "o": 2838,
+          "x": 632
+        },
+        "fact:sim3_inferred:officer:walkaway": {
+          "o": 2838,
+          "x": 2838
+        },
+        "rapport": {
+          "o": 2838,
+          "x": 2342
+        }
+      },
+      "episodes": 640,
+      "mean_R": 0.3509588068181818
+    },
+    "random": {
+      "agreement_rate": 1.0,
+      "counts": {
+        "error:1": {
+          "o": 681,
+          "x": 174
+        },
+        "error:2": {
+          "o": 428,
+          "x": 32
+        },
+        "error:3": {
+          "o": 235,
+          "x": 117
+        },
+        "error:4": {
+          "o": 467,
+          "x": 137
+        },
+        "error:5": {
+          "o": 3840,
+          "x": 1925
+        },
+        "error:6": {
+          "o": 2428,
+          "x": 543
+        },
+        "fact:sim3_inferred:officer:alternative": {
+          "o": 2895,
+          "x": 1831
+        },
+        "fact:sim3_inferred:officer:other_priority:claims": {
+          "o": 2895,
+          "x": 735
+        },
+        "fact:sim3_inferred:officer:other_priority:records": {
+          "o": 2895,
+          "x": 803
+        },
+        "fact:sim3_inferred:officer:other_priority:registration": {
+          "o": 2895,
+          "x": 659
+        },
+        "fact:sim3_inferred:officer:other_priority:staffing": {
+          "o": 2895,
+          "x": 745
+        },
+        "fact:sim3_inferred:officer:other_priority:timeline": {
+          "o": 2895,
+          "x": 859
+        },
+        "fact:sim3_inferred:officer:other_priority:welfare": {
+          "o": 2895,
+          "x": 877
+        },
+        "fact:sim3_inferred:officer:own_priority:claims": {
+          "o": 2895,
+          "x": 727
+        },
+        "fact:sim3_inferred:officer:own_priority:records": {
+          "o": 2895,
+          "x": 767
+        },
+        "fact:sim3_inferred:officer:own_priority:registration": {
+          "o": 2895,
+          "x": 659
+        },
+        "fact:sim3_inferred:officer:own_priority:staffing": {
+          "o": 2895,
+          "x": 750
+        },
+        "fact:sim3_inferred:officer:own_priority:timeline": {
+          "o": 2895,
+          "x": 843
+        },
+        "fact:sim3_inferred:officer:own_priority:welfare": {
+          "o": 2895,
+          "x": 852
+        },
+        "fact:sim3_inferred:officer:tradeable:claims": {
+          "o": 2895,
+          "x": 678
+        },
+        "fact:sim3_inferred:officer:tradeable:records": {
+          "o": 2895,
+          "x": 732
+        },
+        "fact:sim3_inferred:officer:tradeable:registration": {
+          "o": 2895,
+          "x": 660
+        },
+        "fact:sim3_inferred:officer:tradeable:staffing": {
+          "o": 2895,
+          "x": 686
+        },
+        "fact:sim3_inferred:officer:tradeable:timeline": {
+          "o": 2895,
+          "x": 773
+        },
+        "fact:sim3_inferred:officer:tradeable:welfare": {
+          "o": 2895,
+          "x": 788
+        },
+        "fact:sim3_inferred:officer:walkaway": {
+          "o": 2895,
+          "x": 2895
+        },
+        "rapport": {
+          "o": 2895,
+          "x": 2493
+        }
+      },
+      "episodes": 640,
+      "mean_R": 0.34932528409090907
+    },
+    "ucb": {
+      "agreement_rate": 1.0,
+      "counts": {
+        "error:1": {
+          "o": 753,
+          "x": 184
+        },
+        "error:2": {
+          "o": 481,
+          "x": 30
+        },
+        "error:3": {
+          "o": 232,
+          "x": 116
+        },
+        "error:4": {
+          "o": 463,
+          "x": 103
+        },
+        "error:5": {
+          "o": 3840,
+          "x": 1838
+        },
+        "error:6": {
+          "o": 2522,
+          "x": 557
+        },
+        "fact:sim3_inferred:officer:alternative": {
+          "o": 2985,
+          "x": 1975
+        },
+        "fact:sim3_inferred:officer:other_priority:claims": {
+          "o": 2985,
+          "x": 819
+        },
+        "fact:sim3_inferred:officer:other_priority:records": {
+          "o": 2985,
+          "x": 879
+        },
+        "fact:sim3_inferred:officer:other_priority:registration": {
+          "o": 2985,
+          "x": 788
+        },
+        "fact:sim3_inferred:officer:other_priority:staffing": {
+          "o": 2985,
+          "x": 859
+        },
+        "fact:sim3_inferred:officer:other_priority:timeline": {
+          "o": 2985,
+          "x": 969
+        },
+        "fact:sim3_inferred:officer:other_priority:welfare": {
+          "o": 2985,
+          "x": 1016
+        },
+        "fact:sim3_inferred:officer:own_priority:claims": {
+          "o": 2985,
+          "x": 827
+        },
+        "fact:sim3_inferred:officer:own_priority:records": {
+          "o": 2985,
+          "x": 842
+        },
+        "fact:sim3_inferred:officer:own_priority:registration": {
+          "o": 2985,
+          "x": 795
+        },
+        "fact:sim3_inferred:officer:own_priority:staffing": {
+          "o": 2985,
+          "x": 856
+        },
+        "fact:sim3_inferred:officer:own_priority:timeline": {
+          "o": 2985,
+          "x": 950
+        },
+        "fact:sim3_inferred:officer:own_priority:welfare": {
+          "o": 2985,
+          "x": 995
+        },
+        "fact:sim3_inferred:officer:tradeable:claims": {
+          "o": 2985,
+          "x": 778
+        },
+        "fact:sim3_inferred:officer:tradeable:records": {
+          "o": 2985,
+          "x": 818
+        },
+        "fact:sim3_inferred:officer:tradeable:registration": {
+          "o": 2985,
+          "x": 795
+        },
+        "fact:sim3_inferred:officer:tradeable:staffing": {
+          "o": 2985,
+          "x": 780
+        },
+        "fact:sim3_inferred:officer:tradeable:timeline": {
+          "o": 2985,
+          "x": 881
+        },
+        "fact:sim3_inferred:officer:tradeable:welfare": {
+          "o": 2985,
+          "x": 919
+        },
+        "fact:sim3_inferred:officer:walkaway": {
+          "o": 2985,
+          "x": 2985
+        },
+        "rapport": {
+          "o": 2985,
+          "x": 2633
+        }
+      },
+      "episodes": 640,
+      "mean_R": 0.36740056818181815
+    }
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "K": 5,
+  "calibration": "primary offline-v1 costs and tuning held fixed",
+  "case_sha256": "81d4d6db75c11efc0572f19b440e7c52cb547bdd4c8843caa3c20c8d44e8fa54",
+  "perturbation": "BATNA +/-10% of own range, or log-normal issue weights sigma=.2 preserving own maximum",
+  "probe_tiers": [
+    1,
+    3,
+    5
+  ],
+  "reward": "surplus_share",
+  "role": "officer",
+  "scoring": "inferred sim3 utilities",
+  "seed": 602822,
+  "source_sha256": "4ef05d944610e252cc3af9a0d377b56a94f7aab20955fadab7b5c7e0b29b49b8",
+  "training_tiers": [
+    2,
+    2,
+    4,
+    4,
+    4
+  ],
+  "users": 64,
+  "variant": "lower_walkaways"
+}

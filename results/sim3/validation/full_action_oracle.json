@@ -1,0 +1,45 @@
+{
+  "assumptions": "Independent Binomial counts for every component. Fact probabilities share the sampled awareness parameter and synthetic 30% deficit improvement. Opportunity rates fixed at calibrated focused means. Reward counts only error reductions, per new-spec.",
+  "policies": {
+    "greedy": {
+      "ci95": [
+        0.39604475395229,
+        0.4498552209242736
+      ],
+      "mean": 0.42399647713713573,
+      "n": 512
+    },
+    "none": {
+      "ci95": [
+        0.0,
+        0.0
+      ],
+      "mean": 0.0,
+      "n": 512
+    },
+    "random": {
+      "ci95": [
+        0.07458695956705809,
+        0.09788361265723443
+      ],
+      "mean": 0.08643705387406964,
+      "n": 512
+    },
+    "ucb": {
+      "ci95": [
+        0.39604475395229,
+        0.4498552209242736
+      ],
+      "mean": 0.42399647713713573,
+      "n": 512
+    }
+  },
+  "seed": 302822,
+  "tuning": {
+    "forgetting": 0.5,
+    "kappa": 0.0,
+    "mse": 0.029329986977250085,
+    "reward": 0.544722836796962
+  },
+  "users": 512
+}

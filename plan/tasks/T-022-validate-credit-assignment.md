@@ -1,7 +1,7 @@
 ---
 id: T-022
 title: Validate credit assignment
-status: todo
+status: in-progress
 milestone: M2
 workstream: feedback
 owner: unassigned
@@ -19,3 +19,5 @@ Stability: variance of estimates vs N. Planted blunders: insert known bad moves 
 - [ ] Chosen K and N justified by stability and cost
 
 ## Log
+
+- 2026-10-28: Offline sim3 validation: 12 sessions, 26 critical estimates. M=4 vs M=16 rank rho=.839, mean absolute delta difference=.0198 R, 96.2% sign agreement. All 12 planted acceptances show positive loss; 9/9 multi-turn cases rank first. docs/results/credit_assignment.md records limitations; teammate ratings remain pending.

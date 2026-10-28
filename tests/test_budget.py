@@ -84,3 +84,46 @@ def test_gateway_retains_bound_after_network_failure(tmp_path):
     assert ledger.snapshot()["accounted_usd"] == pytest.approx(8.002, abs=0.000002)
     with pytest.raises(ValueError):
         ClaudeLLM(model="unpriced-model")
+
+
+def test_structured_output_settles_before_validation_and_retry(tmp_path):
+    from pydantic import BaseModel
+
+    class Reply(BaseModel):
+        text: str
+
+    ledger = SpendLedger(tmp_path / "budget")
+
+    class RawClient(FakeClient):
+        def __init__(self, ledger):
+            super().__init__(ledger)
+            self.with_raw_response = self
+            self.n = 0
+
+        def parse(self, **request):
+            self.n += 1
+            self.requests.append(request)
+            truncated = self.n == 1
+            body = {
+                "id": "msg_test",
+                "type": "message",
+                "role": "assistant",
+                "model": "claude-opus-5-5",
+                "content": [{"type": "text", "text": "{}"}],
+                "stop_reason": "max_tokens" if truncated else "end_turn",
+                "stop_sequence": None,
+                "usage": {"input_tokens": 100, "output_tokens": 10},
+            }
+
+            def decode():
+                assert ledger.snapshot()["unresolved_requests"] == 0
+                return SimpleNamespace(parsed_output=Reply(text="ok"))
+
+            return SimpleNamespace(http_response=SimpleNamespace(json=lambda: body), parse=decode)
+
+    client = RawClient(ledger)
+    llm = ClaudeLLM(client=client, ledger=ledger)
+    assert llm.parse("s", [], Reply, max_tokens=100).text == "ok"
+    assert [r["max_tokens"] for r in client.requests] == [100, 200]
+    assert ledger.snapshot()["actual_usd"] == pytest.approx(0.0012)
+    assert llm.usage.calls == 2

@@ -1,0 +1,30 @@
+{
+  "early_acceptance": {
+    "mean_delta": {
+      "ci95": [
+        0.23863636363636362,
+        0.3409090909090909
+      ],
+      "mean": 0.28977272727272724,
+      "n": 12
+    },
+    "multi_turn_cases": 9,
+    "multi_turn_top_rank_fraction": 1.0,
+    "positive_fraction": 1.0
+  },
+  "estimated_turns": 26,
+  "limitation": "M=16 is a larger Monte Carlo reference, not ground truth; no human ratings.",
+  "sessions": 12,
+  "small_M_vs_16": {
+    "4": {
+      "mean_absolute_difference": 0.019777097902097904,
+      "sign_agreement": 0.9615384615384616,
+      "spearman": 0.8392795792708596
+    },
+    "5": {
+      "mean_absolute_difference": 0.017679195804195795,
+      "sign_agreement": 0.9615384615384616,
+      "spearman": 0.8628334428244785
+    }
+  }
+}

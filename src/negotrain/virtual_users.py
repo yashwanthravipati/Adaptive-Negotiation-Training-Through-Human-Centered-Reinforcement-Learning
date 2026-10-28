@@ -251,7 +251,7 @@ invent missing role facts. Only formal actions change the agreement.\n"""
             }
         ]
         for _ in range(2):
-            move = self.llm.parse(self.system, messages, CounterpartMove, max_tokens=1024)
+            move = self.llm.parse(self.system, messages, CounterpartMove, max_tokens=4096)
             try:
                 turn = Turn(
                     index=len(session.turns),

@@ -234,7 +234,7 @@ formal offer exactly as stated, including all custom wording."""
                 }
             ]
             dialogue = self.llm.parse(
-                self.system, _merge_consecutive(messages), Dialogue, max_tokens=512
+                self.system, _merge_consecutive(messages), Dialogue, max_tokens=2048
             )
             formal.text = dialogue.message
             return formal

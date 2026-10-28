@@ -1,7 +1,7 @@
 ---
 id: T-017
 title: Controllability experiment (ML-Q1)
-status: todo
+status: in-progress
 milestone: M1
 workstream: counterpart
 owner: unassigned
@@ -20,3 +20,5 @@ Sweep each dial and each tier against fixed simulated users, at least 10 episode
 - [ ] Headline result ready for Checkpoint 2
 
 ## Log
+
+- 2026-10-28: sim3 primary offline sweep: 32 random users, tier mean R .559/.501/.415/.266/.224, rho=-1; zero schedule violations across 7960 primary episodes. Focus opportunity uplift mixed: error4 +.188, error6 -2.156; fixed per-issue opportunities cannot increase under error5. See docs/results/sim3_evaluation.md; no human-likeness claim.

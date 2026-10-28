@@ -41,3 +41,5 @@ Decision 0001 proposes Claude through negotrain.llm. HW0 may have used another p
   calls × roughly $0.019/call = $40–$70, plus feedback. Eight independent workers;
   atomic full-context reservations enforce the $150 total across all workers.
   User's budget authorization covers the sweep; no repeat approval requested.
+
+- 2026-10-28: Live structured-response failures exposed SDK validation before usage accounting. The gateway now reads and settles raw provider usage before parsing generated JSON, with one explicitly budgeted retry for known truncation. Raised dialogue/persona output limits; preserved all earlier uncertain reservations and recorded the runtime revision. Cohort resumed from saved turns.

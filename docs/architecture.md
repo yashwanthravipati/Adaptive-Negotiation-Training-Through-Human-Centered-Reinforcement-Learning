@@ -101,7 +101,8 @@ transcripts and debrief artifacts; the profile feeds saved personal credit back 
 The API gateway remains `negotrain.llm`; offline tests inject `ScriptedLLM`.
 `budget.py` reserves a conservative full-context/output cost in a shared SQLite ledger
 before each request. Successful usage settles the charge; uncertain failures retain the
-reserve. SDK retries and automatic model fallback are disabled. The persistent cap is
+reserve. SDK retries and automatic model fallback are disabled. Structured responses settle usage
+before JSON validation; a known truncation permits one separately reserved retry. The persistent cap is
 $150 across processes and restarts. The ledger and all credentials stay out of git.
 
 `scripts/evaluate.py` runs independent calibration, development, and test populations.

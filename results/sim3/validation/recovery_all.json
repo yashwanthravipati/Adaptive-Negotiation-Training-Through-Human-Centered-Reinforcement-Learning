@@ -1,0 +1,218 @@
+{
+  "error:1": {
+    "auc_reference_above_half": 1.0,
+    "coverage_of_mc_reference": 0.921875,
+    "n": 64,
+    "reference_above_half": 1,
+    "rmse": 0.24887737690204983,
+    "split_half_spearman": 0.1301477798414143
+  },
+  "error:2": {
+    "auc_reference_above_half": 0.8650793650793651,
+    "coverage_of_mc_reference": 0.65625,
+    "n": 64,
+    "reference_above_half": 1,
+    "rmse": 0.3308689124976712,
+    "split_half_spearman": 0.28228897450172286
+  },
+  "error:3": {
+    "auc_reference_above_half": 0.7167487684729064,
+    "coverage_of_mc_reference": 0.90625,
+    "n": 64,
+    "reference_above_half": 35,
+    "rmse": 0.23937280233816913,
+    "split_half_spearman": 0.3432352431972441
+  },
+  "error:4": {
+    "auc_reference_above_half": 0.6783479349186483,
+    "coverage_of_mc_reference": 0.9375,
+    "n": 64,
+    "reference_above_half": 47,
+    "rmse": 0.23653491757083178,
+    "split_half_spearman": 0.13385293483978433
+  },
+  "error:5": {
+    "auc_reference_above_half": 0.977948717948718,
+    "coverage_of_mc_reference": 0.984375,
+    "n": 64,
+    "reference_above_half": 25,
+    "rmse": 0.09543012526348507,
+    "split_half_spearman": 0.8667349116239624
+  },
+  "error:6": {
+    "auc_reference_above_half": null,
+    "coverage_of_mc_reference": 0.828125,
+    "n": 64,
+    "reference_above_half": 0,
+    "rmse": 0.15904692922469377,
+    "split_half_spearman": 0.33649362436325503
+  },
+  "fact:sim3_inferred:officer:alternative": {
+    "auc_reference_above_half": 0.9090909090909091,
+    "coverage_of_mc_reference": 0.984375,
+    "n": 64,
+    "reference_above_half": 33,
+    "rmse": 0.11702790633237087,
+    "split_half_spearman": 0.5733289972859876
+  },
+  "fact:sim3_inferred:officer:other_priority:claims": {
+    "auc_reference_above_half": 0.8722222222222222,
+    "coverage_of_mc_reference": 0.8125,
+    "n": 64,
+    "reference_above_half": 10,
+    "rmse": 0.15897207053351003,
+    "split_half_spearman": 0.3707036839809771
+  },
+  "fact:sim3_inferred:officer:other_priority:records": {
+    "auc_reference_above_half": 0.8772321428571429,
+    "coverage_of_mc_reference": 0.84375,
+    "n": 64,
+    "reference_above_half": 8,
+    "rmse": 0.16650732442472208,
+    "split_half_spearman": 0.39926432888934427
+  },
+  "fact:sim3_inferred:officer:other_priority:registration": {
+    "auc_reference_above_half": 0.7722222222222223,
+    "coverage_of_mc_reference": 0.84375,
+    "n": 64,
+    "reference_above_half": 10,
+    "rmse": 0.1938455678104317,
+    "split_half_spearman": 0.4181187298992535
+  },
+  "fact:sim3_inferred:officer:other_priority:staffing": {
+    "auc_reference_above_half": 0.8471177944862155,
+    "coverage_of_mc_reference": 0.875,
+    "n": 64,
+    "reference_above_half": 7,
+    "rmse": 0.16297681615997273,
+    "split_half_spearman": 0.54561454172487
+  },
+  "fact:sim3_inferred:officer:other_priority:timeline": {
+    "auc_reference_above_half": 0.8373737373737373,
+    "coverage_of_mc_reference": 0.90625,
+    "n": 64,
+    "reference_above_half": 9,
+    "rmse": 0.14713251426983925,
+    "split_half_spearman": 0.4183349810602909
+  },
+  "fact:sim3_inferred:officer:other_priority:welfare": {
+    "auc_reference_above_half": 0.8413379073756432,
+    "coverage_of_mc_reference": 0.828125,
+    "n": 64,
+    "reference_above_half": 11,
+    "rmse": 0.18213877317247104,
+    "split_half_spearman": 0.4818780072063079
+  },
+  "fact:sim3_inferred:officer:own_priority:claims": {
+    "auc_reference_above_half": 0.9005145797598628,
+    "coverage_of_mc_reference": 0.84375,
+    "n": 64,
+    "reference_above_half": 11,
+    "rmse": 0.1522939163911675,
+    "split_half_spearman": 0.5123107822980784
+  },
+  "fact:sim3_inferred:officer:own_priority:records": {
+    "auc_reference_above_half": 0.8521303258145363,
+    "coverage_of_mc_reference": 0.890625,
+    "n": 64,
+    "reference_above_half": 7,
+    "rmse": 0.16404632583557732,
+    "split_half_spearman": 0.41848685836250404
+  },
+  "fact:sim3_inferred:officer:own_priority:registration": {
+    "auc_reference_above_half": 0.7788461538461539,
+    "coverage_of_mc_reference": 0.859375,
+    "n": 64,
+    "reference_above_half": 12,
+    "rmse": 0.18818626517945827,
+    "split_half_spearman": 0.5695635952060931
+  },
+  "fact:sim3_inferred:officer:own_priority:staffing": {
+    "auc_reference_above_half": 0.849624060150376,
+    "coverage_of_mc_reference": 0.90625,
+    "n": 64,
+    "reference_above_half": 7,
+    "rmse": 0.16123723306826804,
+    "split_half_spearman": 0.5129874617502727
+  },
+  "fact:sim3_inferred:officer:own_priority:timeline": {
+    "auc_reference_above_half": 0.8323232323232324,
+    "coverage_of_mc_reference": 0.828125,
+    "n": 64,
+    "reference_above_half": 9,
+    "rmse": 0.1745608901569452,
+    "split_half_spearman": 0.5256354780329048
+  },
+  "fact:sim3_inferred:officer:own_priority:welfare": {
+    "auc_reference_above_half": 0.8157142857142857,
+    "coverage_of_mc_reference": 0.828125,
+    "n": 64,
+    "reference_above_half": 14,
+    "rmse": 0.18542269427296434,
+    "split_half_spearman": 0.459349781828995
+  },
+  "fact:sim3_inferred:officer:tradeable:claims": {
+    "auc_reference_above_half": 0.8737373737373737,
+    "coverage_of_mc_reference": 0.9375,
+    "n": 64,
+    "reference_above_half": 9,
+    "rmse": 0.14015321348514162,
+    "split_half_spearman": 0.47448855202590967
+  },
+  "fact:sim3_inferred:officer:tradeable:records": {
+    "auc_reference_above_half": 0.8421052631578947,
+    "coverage_of_mc_reference": 0.859375,
+    "n": 64,
+    "reference_above_half": 7,
+    "rmse": 0.16354102764862732,
+    "split_half_spearman": 0.5610481144207533
+  },
+  "fact:sim3_inferred:officer:tradeable:registration": {
+    "auc_reference_above_half": 0.8929292929292929,
+    "coverage_of_mc_reference": 0.84375,
+    "n": 64,
+    "reference_above_half": 9,
+    "rmse": 0.15154230470398,
+    "split_half_spearman": 0.49191351120393706
+  },
+  "fact:sim3_inferred:officer:tradeable:staffing": {
+    "auc_reference_above_half": 0.7901785714285714,
+    "coverage_of_mc_reference": 0.875,
+    "n": 64,
+    "reference_above_half": 8,
+    "rmse": 0.15779213428615443,
+    "split_half_spearman": 0.6638211253116929
+  },
+  "fact:sim3_inferred:officer:tradeable:timeline": {
+    "auc_reference_above_half": 0.7940705128205128,
+    "coverage_of_mc_reference": 0.875,
+    "n": 64,
+    "reference_above_half": 12,
+    "rmse": 0.1510728511227504,
+    "split_half_spearman": 0.5692853042836687
+  },
+  "fact:sim3_inferred:officer:tradeable:welfare": {
+    "auc_reference_above_half": 0.9118589743589743,
+    "coverage_of_mc_reference": 0.90625,
+    "n": 64,
+    "reference_above_half": 12,
+    "rmse": 0.1499173294568272,
+    "split_half_spearman": 0.5528930522269768
+  },
+  "fact:sim3_inferred:officer:walkaway": {
+    "auc_reference_above_half": null,
+    "coverage_of_mc_reference": 0.09375,
+    "n": 64,
+    "reference_above_half": 64,
+    "rmse": 0.12797977206690997,
+    "split_half_spearman": 0.4126367823570665
+  },
+  "rapport": {
+    "auc_reference_above_half": 0.9398907103825137,
+    "coverage_of_mc_reference": 0.78125,
+    "n": 64,
+    "reference_above_half": 61,
+    "rmse": 0.13529442961699256,
+    "split_half_spearman": 0.4571481384768448
+  }
+}
