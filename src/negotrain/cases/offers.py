@@ -13,6 +13,8 @@ import math
 from collections.abc import Iterator
 from functools import lru_cache
 
+import numpy as np
+
 from negotrain.cases.scoring import score_offer
 from negotrain.schemas import Case, Offer
 
@@ -32,7 +34,14 @@ def points(case: Case, role_id: str, offer: Offer) -> float:
 
 def best_offer_for(case: Case, role_id: str) -> Offer:
     role = case.role(role_id)
-    return Offer(terms={i.id: max(i.option_ids(), key=role.points[i.id].get) for i in case.issues})
+    terms = {}
+    for issue in case.issues:
+        banned = {o for c in role.constraints if c.hard for o in c.disallowed.get(issue.id, [])}
+        allowed = [o for o in issue.option_ids() if o not in banned]
+        if not allowed:
+            raise ValueError(f"no legal options for {role_id} on {issue.id}")
+        terms[issue.id] = max(allowed, key=role.points[issue.id].get)
+    return Offer(terms=terms)
 
 
 def best_points(case: Case, role_id: str) -> float:
@@ -212,22 +221,58 @@ def closest_offer(
     if target is not None and target.custom_terms:
         target = Offer(terms=target.terms)
     if space_size(case) <= MAX_ENUMERATE:
-        evaluate = _evaluator(case, role_id)
-        wanted = [target.terms.get(i.id) if target else None for i in case.issues]
-        best: tuple[int, float] | None = None
-        choice = None
-        for combo in _combos(case):
-            pts, valid = evaluate(combo)
-            if pts < min_points or not valid:
-                continue
-            key = (
-                sum(1 for o, w in zip(combo, wanted, strict=False) if w is not None and o != w),
-                pts,
-            )
-            if best is None or key < best:
-                best, choice = key, combo
-        return _offer(case, choice) if choice else None
+        indices, values = own_offer_table(case, role_id)
+        eligible = np.flatnonzero(values >= min_points)
+        if not len(eligible):
+            return None
+        wanted = np.array(
+            [
+                i.option_ids().index(target.terms[i.id])
+                if target and target.terms.get(i.id) in i.option_ids()
+                else -1
+                for i in case.issues
+            ]
+        )
+        distance = ((indices[eligible] != wanted) & (wanted >= 0)).sum(axis=1)
+        choice = eligible[np.lexsort((values[eligible], distance))[0]]
+        return indexed_offer(case, indices[choice])
     return _greedy_closest(case, role_id, min_points, target)
+
+
+def indexed_offer(case: Case, indices) -> Offer:
+    return Offer(
+        terms={i.id: i.options[int(n)].id for i, n in zip(case.issues, indices, strict=True)}
+    )
+
+
+def own_offer_table(case: Case, role_id: str) -> tuple[np.ndarray, np.ndarray]:
+    """Cached exact action space using ONLY this role's utilities and constraints."""
+    if space_size(case) > MAX_ENUMERATE:
+        raise ValueError("finite action table too large")
+    role = case.role(role_id)
+    options = tuple(tuple(i.option_ids()) for i in case.issues)
+    values = tuple(
+        tuple(role.points[i.id][o] for o in opts)
+        for i, opts in zip(case.issues, options, strict=True)
+    )
+    banned = tuple(
+        tuple(sorted({o for c in role.constraints if c.hard for o in c.disallowed.get(i.id, [])}))
+        for i in case.issues
+    )
+    return _own_table(options, values, banned)
+
+
+@lru_cache(maxsize=128)
+def _own_table(options: tuple, values: tuple, banned: tuple):
+    indices = np.array(list(itertools.product(*(range(len(o)) for o in options))), dtype=np.int16)
+    valid = np.ones(len(indices), dtype=bool)
+    points = np.zeros(len(indices))
+    for j, (opts, table, disallowed) in enumerate(zip(options, values, banned, strict=True)):
+        valid &= ~np.isin(indices[:, j], [opts.index(o) for o in disallowed if o in opts])
+        points += np.array(table)[indices[:, j]]
+    indices, points = indices[valid], points[valid]
+    indices.flags.writeable = points.flags.writeable = False
+    return indices, points
 
 
 def _greedy_closest(

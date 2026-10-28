@@ -22,3 +22,10 @@ Shared by T-017, T-018, T-021, and T-026. Use concurrent.futures for parallel ep
 
 ## Log
 - 2026-10-25: MVP branch: simulation.py ScriptedUser + run_episode(case, session, counterpart, user, max_turns) (signature differs from spec). No LLM persona, results/ output, or cost prompt yet.
+- 2026-10-28: Added randomly sampled grounded scripted users, role-projected LLM
+  personas, restartable episode checkpoints, paired policy comparisons, and exact
+  Binomial-oracle experiments. Grounded behavior propensities are NOT falsely labeled
+  true conditional detector rates; recovery compares to independent Monte Carlo reference
+  rates. LLM users receive prior feedback; only the synthetic model imposes Learn.
+  scripts/evaluate.py separates calibration/development/test seeds and preserves raw
+  transcripts privately. Pending: execute sim3 suite and live suite after export approval.

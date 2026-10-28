@@ -244,6 +244,7 @@ def parse_documents(
     *,
     infer_missing: bool = True,
     source: str = "",
+    instructions: str = "",
 ) -> Case:
     """Structured ``Case`` from a set of uploaded files (file name -> extracted text).
 
@@ -265,5 +266,5 @@ def parse_documents(
         )
     else:
         instruction += " Include only roles whose instructions are provided."
-    content = "\n\n".join(parts + [instruction])
+    content = "\n\n".join(parts + [instruction, instructions])
     return _parse([{"role": "user", "content": content}], llm, source, documents)

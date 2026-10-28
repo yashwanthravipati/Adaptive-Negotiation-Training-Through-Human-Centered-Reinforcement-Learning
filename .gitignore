@@ -12,6 +12,7 @@ dist/
 
 # Secrets
 .env
+.api-budget.sqlite3*
 
 # Data that must never be committed (plan/decisions/0004-data-handling.md)
 data/cases/private/*

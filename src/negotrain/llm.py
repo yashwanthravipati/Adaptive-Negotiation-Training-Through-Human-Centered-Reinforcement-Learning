@@ -25,6 +25,7 @@ import anthropic
 from pydantic import BaseModel
 
 from negotrain import config
+from negotrain.budget import SpendLedger
 
 T = TypeVar("T", bound=BaseModel)
 Message = dict[str, Any]  # {"role": "user" | "assistant", "content": str}
@@ -55,6 +56,10 @@ class LLM(Protocol):
 
 # USD per million tokens for cost estimates (claude-opus-5-5; update if the model changes).
 PRICE_PER_MTOK = {"input": 4.00, "output": 20.00, "cache_read": 0.20, "cache_write": 5.00}
+MODEL_PRICES = {
+    "claude-opus-5-5": PRICE_PER_MTOK,
+    "claude-sonnet-5-5": {"input": 2.0, "output": 10.0, "cache_read": 0.10, "cache_write": 2.5},
+}
 
 
 @dataclass
@@ -64,6 +69,7 @@ class Usage:
     output_tokens: int = 0
     cache_read_input_tokens: int = 0
     cache_creation_input_tokens: int = 0
+    prices: dict = field(default_factory=lambda: dict(PRICE_PER_MTOK))
     # Rollouts call the API from several threads.
     _lock: threading.Lock = field(default_factory=threading.Lock, repr=False, compare=False)
 
@@ -79,13 +85,26 @@ class Usage:
 
     def cost(self) -> float:
         """Estimated USD at PRICE_PER_MTOK (cache writes approximated at the 5-minute rate)."""
-        p = PRICE_PER_MTOK
+        p = self.prices
         return (
             self.input_tokens * p["input"]
             + self.output_tokens * p["output"]
             + self.cache_read_input_tokens * p["cache_read"]
             + self.cache_creation_input_tokens * p["cache_write"]
         ) / 1e6
+
+    def snapshot(self) -> dict:
+        with self._lock:
+            return {
+                name: getattr(self, name)
+                for name in (
+                    "calls",
+                    "input_tokens",
+                    "output_tokens",
+                    "cache_read_input_tokens",
+                    "cache_creation_input_tokens",
+                )
+            } | {"estimated_usd": self.cost()}
 
 
 class ClaudeLLM:
@@ -96,11 +115,15 @@ class ClaudeLLM:
         model: str | None = None,
         effort: str | None = None,
         client: anthropic.Anthropic | None = None,
+        ledger: SpendLedger | None = None,
     ):
         self.model = model or config.model()
         self.effort = effort or config.effort()
-        self.client = client or anthropic.Anthropic()
-        self.usage = Usage()
+        if self.model not in MODEL_PRICES:
+            raise ValueError("model needs verified pricing and a context bound before API use")
+        self.client = (client or anthropic.Anthropic()).with_options(max_retries=0, timeout=180)
+        self.ledger = ledger or SpendLedger(config.REPO_ROOT / ".api-budget.sqlite3")
+        self.usage = Usage(prices=MODEL_PRICES[self.model])
 
     def _request(self, system: str, messages: Sequence[Message], max_tokens: int) -> dict:
         return {
@@ -112,10 +135,13 @@ class ClaudeLLM:
             # The system prompt (case + role sheet) is identical across turns of a session.
             "cache_control": {"type": "ephemeral"},
             "betas": [_FALLBACK_BETA],
-            "fallbacks": "default",
+            "fallbacks": [],  # every model request must have its own reservation
         }
 
-    def _check(self, response: Any) -> None:
+    def _check(self, response: Any, reservation: str) -> None:
+        request_usage = Usage(prices=MODEL_PRICES[self.model])
+        request_usage.add(response.usage)
+        self.ledger.settle(reservation, request_usage.cost(), request_usage.snapshot())
         self.usage.add(response.usage)
         if response.stop_reason == "refusal":
             category = response.stop_details.category if response.stop_details else None
@@ -124,9 +150,35 @@ class ClaudeLLM:
             raise RuntimeError("response hit max_tokens; raise the limit for this call")
 
     def complete(self, system: str, messages: Sequence[Message], *, max_tokens: int = 16000) -> str:
-        response = self.client.beta.messages.create(**self._request(system, messages, max_tokens))
-        self._check(response)
+        response = self._call(system, messages, max_tokens)
         return "".join(b.text for b in response.content if b.type == "text")
+
+    def _call(
+        self,
+        system: str,
+        messages: Sequence[Message],
+        max_tokens: int,
+        output_type: type[T] | None = None,
+    ):
+        if not 1 <= max_tokens <= 64000:
+            raise ValueError("invalid output token bound")
+        # Reserve the ENTIRE documented 1M context at the most expensive input/cache
+        # rate (1h writes), plus max output. This avoids treating token-count estimates
+        # as hard bounds. Normal usage releases the unused reserve immediately.
+        prices = MODEL_PRICES[self.model]
+        bound = 2 * prices["input"] + max_tokens * prices["output"] / 1e6
+        reservation = self.ledger.reserve(self.model, bound)
+        try:
+            request = self._request(system, messages, max_tokens)
+            if output_type is None:
+                response = self.client.beta.messages.create(**request)
+            else:
+                response = self.client.beta.messages.parse(**request, output_format=output_type)
+        except Exception as error:
+            self.ledger.uncertain(reservation, type(error).__name__)
+            raise
+        self._check(response, reservation)
+        return response
 
     def parse(
         self,
@@ -136,10 +188,7 @@ class ClaudeLLM:
         *,
         max_tokens: int = 16000,
     ) -> T:
-        response = self.client.beta.messages.parse(
-            **self._request(system, messages, max_tokens), output_format=output_type
-        )
-        self._check(response)
+        response = self._call(system, messages, max_tokens, output_type)
         if response.parsed_output is None:
             raise RuntimeError("model returned no parseable output")
         return response.parsed_output
