@@ -14,44 +14,27 @@ from pydantic import BaseModel, Field
 
 from negotrain.counterpart.profiles import sample_profile
 from negotrain.profiling import NegotiatorProfile, extract_features
+from negotrain.profiling.belief import choose_focus
 from negotrain.schemas import Case, CounterpartProfile, Session
 
 START_TIER = 2
 
-# Which counterpart behavior makes a weak skill matter.
+# Fixed labels act through dials, behavior hooks, prep, and feedback order.
 FOCUS_DIALS: dict[str, tuple[dict[str, float], str]] = {
-    "anchoring": (
-        {"anchoring": 0.9},
-        "a counterpart that anchors aggressively, so you practice opening ambitiously and "
-        "not letting their number set the range",
-    ),
-    "concession_discipline": (
-        {"concession_rate": 0.15, "aggression": 0.6},
-        "a counterpart that concedes slowly and applies pressure, so you practice conceding "
-        "in small, reciprocated steps",
-    ),
-    "information_gathering": (
-        {"disclosure": 0.85, "cooperativeness": 0.6},
-        "a counterpart that shares its priorities when asked, so questions pay off",
-    ),
-    "value_creation": (
-        {"cooperativeness": 0.85, "disclosure": 0.6},
-        "a cooperative counterpart with room for trades across issues",
-    ),
-    "value_claiming": (
-        {"anchoring": 0.8, "bluffing": 0.5},
-        "a counterpart that claims hard and overstates its alternatives",
-    ),
-    "closing": (
-        {"concession_rate": 0.5, "aggression": 0.3},
-        "a reasonable counterpart, so you practice recognizing and closing a good deal",
-    ),
+    "error:1": ({}, "hold until you concede or six turns pass"),
+    "error:2": ({}, "sometimes withhold reciprocal concessions"),
+    "error:3": ({"anchoring": 1.0}, "open at its most extreme package"),
+    "error:4": ({}, "hold an early low-surplus offer for two turns"),
+    "error:5": ({}, "leave an issue for you to raise"),
+    "error:6": ({}, "put two packages on the table early"),
+    "rapport": ({}, "respond to constructive engagement with a faster concession"),
 }
 
 
 class ScenarioSpec(BaseModel):
     tier: int = Field(ge=1, le=5)
-    focus_skill: str | None = None
+    focus: str | None = None
+    focus_issue: str | None = None
     dial_overrides: dict[str, float] = Field(default_factory=dict)
     case_id: str | None = None
     rationale: str
@@ -95,11 +78,25 @@ def next_scenario(
         else:
             reasons.append(f"Staying at tier {tier} to consolidate.")
 
-    focus = profile.weaknesses[0] if profile.weaknesses else None
+    # Fact beliefs are case-specific; do not practice a fact from another upload.
+    candidates = [
+        key
+        for key in profile.belief.components
+        if not key.startswith("fact:")
+        or not case_ids
+        or any(key.startswith(f"fact:{cid}:") for cid in case_ids)
+    ]
+    focus = choose_focus(profile.belief, profile.costs, candidates=candidates)
     overrides: dict[str, float] = {}
     if focus:
-        overrides, why = FOCUS_DIALS[focus]
-        reasons.append(f"Your weakest area so far is {focus.replace('_', ' ')}; you'll face {why}.")
+        overrides, why = FOCUS_DIALS.get(focus, ({}, "reveal the relevant fact when asked"))
+        reasons.append(f"Practice {profile.labels[focus].lower()}; the counterpart will {why}.")
+    # Tier 5 requires two strong tier-4 rehearsals, not just any two successes.
+    if tier == 5 and not (
+        len(rehearsals) >= 2
+        and all(s.counterpart_profile.tier >= 4 and _strong(s, c) for s, c in rehearsals[-2:])
+    ):
+        tier = 4
 
     case_id = None
     if case_ids:
@@ -110,7 +107,7 @@ def next_scenario(
         case_id = min(case_ids, key=lambda cid: (played[cid], cid))
     return ScenarioSpec(
         tier=tier,
-        focus_skill=focus,
+        focus=focus,
         dial_overrides=dict(overrides),
         case_id=case_id,
         rationale=" ".join(reasons),
@@ -119,7 +116,8 @@ def next_scenario(
 
 def counterpart_for(spec: ScenarioSpec, rng: random.Random) -> CounterpartProfile:
     """A sampled profile for the spec: the tier's preset, jittered, with the focus overrides."""
-    profile = sample_profile(spec.tier, rng)
+    profile = sample_profile(spec.tier, rng, jitter=0.0)
+    profile = profile.model_copy(update={"focus": spec.focus, "focus_issue": spec.focus_issue})
     if spec.dial_overrides:
         profile = profile.model_copy(update=spec.dial_overrides)
     return profile

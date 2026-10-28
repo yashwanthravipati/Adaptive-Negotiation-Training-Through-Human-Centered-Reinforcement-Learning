@@ -16,6 +16,7 @@ dist/
 # Data that must never be committed (plan/decisions/0004-data-handling.md)
 data/cases/private/*
 !data/cases/private/README.md
+data/cases/sim3/
 data/sessions/*
 !data/sessions/.gitkeep
 data/study/

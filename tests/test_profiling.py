@@ -57,18 +57,37 @@ def test_features_for_a_logged_real_negotiation_without_turns(case):
 
 
 def test_profile_separates_a_weak_anchor_from_a_strong_one(case):
-    weak = [(play(case, open_share=0.3), case) for _ in range(3)]
-    strong = [(play(case, open_share=1.0), case) for _ in range(3)]
-    pw, ps = build_profile("w", weak), build_profile("s", strong)
-    assert pw.skill("anchoring").score < ps.skill("anchoring").score
-    assert pw.flag_counts["weak_anchor"] == 3 and "weak_anchor" not in ps.flag_counts
-    assert pw.skill("anchoring").confidence == 3 / 5
+    from negotrain.cases.offers import best_offer_for
+
+    def history(role):
+        sessions = []
+        for _ in range(3):
+            session = Session(
+                case_id=case.id, user_role_id="candidate", counterpart_role_id="recruiter"
+            )
+            session.add_turn(
+                Turn(
+                    index=0, speaker="counterpart", text="", offer=best_offer_for(case, "recruiter")
+                ),
+                case,
+            )
+            session.add_turn(
+                Turn(index=1, speaker="user", text="", offer=best_offer_for(case, role)), case
+            )
+            session.add_turn(Turn(index=2, speaker="counterpart", text="", walk_away=True), case)
+            sessions.append((session, case))
+        return sessions
+
+    pw = build_profile("w", history("recruiter"))
+    ps = build_profile("s", history("candidate"))
+    assert pw.belief.components["error:3"].mean > ps.belief.components["error:3"].mean
+    assert pw.belief.components["error:3"].opportunities == 3
 
 
 def test_empty_profile_is_neutral(case):
     p = build_profile("nobody", [])
-    assert p.n_sessions == 0 and not p.weaknesses
-    assert all(s.score == 0.5 for s in p.skills)
+    assert p.n_sessions == 0
+    assert all(b.mean == 0.5 and b.opportunities == 0 for b in p.belief.components.values())
 
 
 def test_curriculum_starts_at_tier_two_and_targets_the_weakness(case):
@@ -76,13 +95,20 @@ def test_curriculum_starts_at_tier_two_and_targets_the_weakness(case):
     assert spec.tier == 2 and spec.case_id == case.id
     weak = [(play(case, open_share=0.3, tier=2), case)]
     spec = next_scenario(build_profile("w", weak), weak, [case.id])
-    assert spec.focus_skill is not None
+    assert spec.focus is not None
     profile = counterpart_for(spec, random.Random(0))
     for dial, value in spec.dial_overrides.items():
         assert getattr(profile, dial) == value
 
 
 def test_curriculum_steps_up_after_two_strong_results(case):
-    strong = [(play(case, open_share=1.0, step=0.02, tier=1), case) for _ in range(2)]
+    from negotrain.cases.offers import closest_offer
+
+    strong = []
+    for _ in range(2):
+        session = play(case, tier=1)
+        session.status = "agreed"
+        session.agreement = closest_offer(case, "candidate", 7000)
+        strong.append((session, case))
     spec = next_scenario(build_profile("s", strong), strong)
     assert spec.tier == 2

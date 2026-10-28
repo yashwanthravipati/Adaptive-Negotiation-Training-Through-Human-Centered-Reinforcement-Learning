@@ -1,0 +1,97 @@
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage[expansion=false]{microtype}
+\usepackage[hidelinks]{hyperref}
+\usepackage{enumitem}
+\setlist{nosep,leftmargin=1.4em}
+\setlist[itemize]{label=$\bullet$}
+\setlength{\parskip}{0.4em}
+\setlength{\parindent}{0pt}
+\makeatletter
+\renewcommand\paragraph{\@startsection{paragraph}{4}{\z@}{0.7ex \@plus 0.3ex}{-1em}{\normalfont\normalsize\bfseries}}
+\makeatother
+\setlength{\abovedisplayskip}{6pt}\setlength{\belowdisplayskip}{6pt}
+
+\newcommand{\E}{\mathbb{E}}
+
+\title{\vspace{-2.2em}Adaptive Negotiation Training Through Human-Centered RL}
+\author{Yash Ravipati, Mahdi Nassereddine, Vincent Song \\ \small CS2822r, Fall 2026}
+\date{\vspace{-1.2em}}
+
+\begin{document}
+\maketitle
+
+\section{Research question}
+
+In this project, we explore whether rehearsing for a negotiation using a LLM coach can improve human performance. We invert the traditional Reinforcement Learning (RL) paradigm and treat the human as the `model' to optimise. Informally then, the research question we pose is whether we can improve a user's negotiation performance over several rounds of LLM-synthesised negotiation rehearsals followed by feedback. A more formal statement follows.
+
+\paragraph{1. The case $c$.}
+The case is the negotiation the user uploads. Formally, a case is the tuple
+\begin{equation}
+c = \big( \mathcal{A},\; p^{\mathrm{U}},\; p^{\mathrm{C}},\; W^{\mathrm{U}},\; W^{\mathrm{C}} \big), \qquad \mathcal{A} = \mathcal{O}_1 \times \dots \times \mathcal{O}_L,
+\end{equation}
+whose parts are as follows. The case has $L$ \emph{issues} to be agreed; in a job-offer negotiation between a candidate and an employer, the issues might be salary, start date, and whether remote work is allowed. Each issue $\ell$ has a set of options $\mathcal{O}_\ell$, which may be finite, such as $\mathcal{O}_3 = \{\text{yes}, \text{no}\}$ for remote work, or continuous, such as $\mathcal{O}_1 = [\$100\text{k}, \$150\text{k}]$ for salary. An \emph{agreement} $a \in \mathcal{A}$ picks one option for every issue, for example $a = (\$120\text{k}, \text{October start}, \text{yes})$. The functions $p^{\mathrm{U}}, p^{\mathrm{C}} : \mathcal{A} \to \mathbb{R}$ are the \emph{point tables} of the user and the counterpart: each says how many points that side earns from each agreement, and each side sees only its own. The candidate might earn $p^{\mathrm{U}}(a) = 4500$ points from the agreement above. Finally, $W^{\mathrm{U}}$ and $W^{\mathrm{C}}$ are the \emph{walk-away values}, the points each side receives if no agreement is reached; a candidate holding a competing offer might have $W^{\mathrm{U}} = 4000$.
+
+\paragraph{2. The rehearsal and its score.}
+A rehearsal is one negotiation of the case between the user and an LLM counterpart, and it produces a transcript. Formally, the transcript is the tuple
+\begin{equation}
+\tau = \big( y_1, \dots, y_N;\; a^{*} \big), \qquad N \le 20, \qquad a^{*} \in \mathcal{A} \cup \{\varnothing\},
+\end{equation}
+where $y_k$ is the $k$-th message (text, optionally with a formal offer of an agreement) and $a^{*}$ is the agreement reached, or $\varnothing$ if there was none. Messages alternate between the user and the counterpart. The counterpart's text is written by the language model, but its offers obey a \emph{concession schedule} $L(k)$, the lowest number of its own points it will accept at message $k$: it never offers or accepts an $a$ with $p^{\mathrm{C}}(a) < L(k)$. We score a rehearsal by the share of the available gains the user captured:
+\begin{equation}
+R(\tau) = \frac{p^{\mathrm{U}}(a^{*}) - W^{\mathrm{U}}}{P^{\star} - W^{\mathrm{U}}}, \qquad P^{\star} = \max \big\{ p^{\mathrm{U}}(a) : a \in \mathcal{A},\ p^{\mathrm{C}}(a) \ge W^{\mathrm{C}} \big\},
+\end{equation}
+so the numerator is what the user gained over walking away, and $P^{\star}$ is the most the user could have obtained in any agreement the counterpart would accept. A rehearsal without a deal scores $R = 0$, and $R < 0$ if the user accepts a deal worse than walking away. The transcript $\tau$ is simply the full exchange, for instance ``Candidate: I was hoping for $\$130$k. Employer: We can do $\$115$k with an October start. \dots''. The index $t = 0, 1, \dots, K-1$ counts rehearsals within one user's training run, so $\tau_t$ is the transcript of the $t$-th rehearsal.
+
+\paragraph{3. The setting $\sigma$.}
+The setting is everything the coach controls about one rehearsal. It has two parts: a difficulty tier, from 1 to 5, which sets how hard the counterpart bargains, and a \emph{focus}, which names the one mistake the rehearsal should train. A focus changes how the counterpart behaves, which moments the feedback leads with, and what the preparation notes stress. For example, the setting (tier 3, focus ``conceding first'') produces a moderately tough counterpart that holds its position until the user moves, so the user meets the situation they tend to mishandle. Formally,
+\begin{equation}
+\sigma = (\mu, f), \qquad \mu \in \{1, \dots, 5\}, \qquad f \in \{1, \dots, J\} \cup \{\varnothing\},
+\end{equation}
+where $\mu$ is the tier, $f$ is the index of the mistake to focus on (defined below), and $f = \varnothing$ means no focus. Each tier fixes a concession schedule $L_\mu$, with higher tiers opening higher and conceding more slowly. The example setting is $\sigma = (3, \text{conceding first})$.
+
+\paragraph{4. The user's state $s$.}
+The coach needs a description of the user that names their mistakes and can be estimated from a few rehearsals. We therefore describe the user before rehearsal $t$ by a vector of probabilities,
+\begin{equation}
+s_t = (s_{t,1}, \dots, s_{t,J}) \in [0,1]^J, \qquad s_{t,j} = \Pr(\text{user makes mistake } j \mid \text{a chance to make it arises}).
+\end{equation}
+Each mistake is detected by code in the transcript, along with its chances. We target $J = 6$ mistakes. \emph{Conceding first} is making the first concession before the counterpart has made any; every concession by the user is a chance to make it. An \emph{unreciprocated concession} is conceding again when the counterpart has not conceded since the user's last concession. \emph{Anchoring on their number} is answering the counterpart's opening offer with a counteroffer closer to their number than to one's own best outcome. \emph{Accepting low} is accepting an agreement that captures little of the available gains, meaning a score $R$ (defined above) below a fixed threshold. \emph{Ignoring an issue} is never raising or varying an issue that one's own point table values; each such issue is a chance once per rehearsal. A \emph{dominated offer} is proposing an agreement when another agreement already on the table gives both sides at least as many points. Acting on key facts of the case and building rapport are tracked the same way. The state is hidden, and it changes as the user learns. A user is therefore the tuple
+\begin{equation}
+u = \big( s_0,\; \mathrm{Learn}_u \big), \qquad \tau_t \sim \mathrm{Rehearse}(c, s_t, \sigma_t), \qquad s_{t+1} \sim \mathrm{Learn}_u(s_t, \sigma_t, F_t),
+\end{equation}
+where $s_0$ is the state before training, $F_t$ is the feedback shown after rehearsal $t$, Rehearse is the negotiation itself (the user's messages drawn so that mistake $j$ happens at rate $s_{t,j}$, the counterpart's from the language model and $L_\mu$), and $\mathrm{Learn}_u$ is how this user changes between rehearsals. $\mathrm{Learn}_u$ is unknown, and for real users it happens in their head.
+
+\paragraph{5. The coach's belief $b$.}
+The coach sees only what the detectors count. For mistake $j$ in rehearsal $t$, it observes $n_{t,j}$ chances and $m_{t,j}$ mistakes, which follow
+\begin{equation}
+m_{t,j} \sim \mathrm{Binomial}(n_{t,j}, s_{t,j}).
+\end{equation}
+Its belief $b_t$ is a Beta distribution for each $s_{t,j}$. A Beta distribution describes an unknown probability through two numbers that act like counts of past mistakes and past successes, so updating it after a rehearsal means adding the new counts. Because the user is expected to improve, older counts are shrunk by a factor $\lambda \in (0, 1]$ before the new ones are added:
+\begin{equation}
+b_t = \big( \mathrm{Beta}(\alpha_{t,j}, \beta_{t,j}) \big)_{j=1}^{J}, \qquad
+\alpha_{t+1,j} = \lambda\, \alpha_{t,j} + m_{t,j}, \qquad
+\beta_{t+1,j} = \lambda\, \beta_{t,j} + (n_{t,j} - m_{t,j}).
+\label{eq:update}
+\end{equation}
+
+\paragraph{6. The coach $\pi$.}
+The coach turns its belief into the next setting, and turns each transcript into feedback. Together with the belief update above, this makes the coach the tuple
+\begin{equation}
+\mathcal{C} = \big( b_0,\; \mathrm{Update},\; \pi,\; \mathrm{Feedback} \big), \qquad
+\begin{aligned} \sigma_t &= \pi(b_t), & F_t &= \mathrm{Feedback}(\tau_t), \\ b_{t+1} &= \mathrm{Update}(b_t, n_t, m_t), \end{aligned}
+\end{equation}
+where $b_0$ is the starting belief, Update is equation~\eqref{eq:update}, $\pi$ is the \emph{policy} that picks the setting, and Feedback writes the report.
+Feedback works by replaying the negotiation from key turns with the user's move swapped for an alternative, and reporting how much each alternative would have changed $R$.
+
+\paragraph{Learning objectives.}
+A user's \emph{competence} is their expected score on a fixed set $\mathcal{D}$ of held-out cases and tiers, played with no focus and no feedback. Formally,
+\begin{equation}
+G(s) = \E_{(c,\,\mu) \sim \mathcal{D}} \big[ R(\tau) \big], \qquad \tau \sim \mathrm{Rehearse}\big(c, s, (\mu, \varnothing)\big).
+\end{equation}
+The coach's objective is the expected gain in competence over a training run of $K = 5$ rehearsals, averaged over users $u$. A coach that takes a typical user from $G = 0.25$ to $G = 0.40$ in five rehearsals contributes a gain of 0.15 for that user:
+\begin{equation}
+\max_\pi \; V(\pi) = \E_u \big[ G(s_K) - G(s_0) \big], \qquad s_K \text{ produced by running } \mathcal{C} \text{ with policy } \pi \text{ on user } u.
+\end{equation}
+
+\end{document}

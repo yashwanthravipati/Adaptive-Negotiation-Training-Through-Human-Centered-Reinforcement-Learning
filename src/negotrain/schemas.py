@@ -161,6 +161,15 @@ class Offer(BaseModel):
         )
 
 
+class TurnTags(BaseModel):
+    """Observed message annotations, never inferred from a synthetic user's hidden state."""
+
+    fact_ids: list[str] = Field(default_factory=list)
+    raised_issues: list[str] = Field(default_factory=list)
+    rapport: bool = False
+    source: Literal["llm", "scripted", "human"]
+
+
 class Turn(BaseModel):
     index: int
     speaker: Speaker
@@ -168,6 +177,7 @@ class Turn(BaseModel):
     offer: Offer | None = None
     accept: bool = Field(default=False, description="Accepts the other side's latest offer")
     walk_away: bool = False
+    tags: TurnTags | None = None
     created_at: datetime = Field(default_factory=_now)
 
 
@@ -182,6 +192,9 @@ class CounterpartProfile(BaseModel):
     concession_rate: float = Field(ge=0, le=1, description="How readily it gives ground")
     disclosure: float = Field(ge=0, le=1, description="How much private info it shares")
     bluffing: float = Field(ge=0, le=1, description="Willingness to misstate its position")
+    concession_floor: float = Field(default=0.05, ge=0, le=1)
+    focus: str | None = None
+    focus_issue: str | None = None
 
 
 SessionStatus = Literal["active", "agreed", "impasse", "abandoned"]
@@ -195,6 +208,8 @@ class Session(BaseModel):
     user_role_id: str
     counterpart_role_id: str
     counterpart_profile: CounterpartProfile | None = None
+    seed: int = 0
+    max_user_turns: int = Field(default=20, ge=1, le=20)
     turns: list[Turn] = Field(default_factory=list)
     status: SessionStatus = "active"
     agreement: Offer | None = None
@@ -227,10 +242,15 @@ class Session(BaseModel):
             raise ValueError(f"session is {self.status}")
         if turn.index != len(self.turns):
             raise ValueError(f"expected turn index {len(self.turns)}, got {turn.index}")
+        if sum((turn.offer is not None, turn.accept, turn.walk_away)) > 1:
+            raise ValueError("a move has at most one formal action")
         if turn.offer is not None:
             issue_ids = {i.id for i in case.issues}
             if (turn.offer.terms.keys() | turn.offer.custom_terms.keys()) - issue_ids:
                 raise ValueError("offer contains an unknown issue")
+            for issue_id, option_id in turn.offer.terms.items():
+                if option_id not in case.issue(issue_id).option_ids():
+                    raise ValueError("offer contains an unknown option")
         agreement = None
         if turn.accept and not turn.walk_away:
             other: Speaker = "counterpart" if turn.speaker == "user" else "user"
@@ -243,6 +263,12 @@ class Session(BaseModel):
         elif turn.accept:
             self.agreement = agreement
             self.status = "agreed"
+        elif turn.speaker == "counterpart" and self.user_turns >= self.max_user_turns:
+            self.status = "impasse"
+
+    @property
+    def user_turns(self) -> int:
+        return sum(t.speaker == "user" for t in self.turns)
 
 
 # -------------------------------------------------------------------- participants

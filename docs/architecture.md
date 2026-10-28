@@ -161,3 +161,25 @@ by a hash of participant/case/role. Source attachments share that scope. Questio
 saved as pending before a request, enabling retry without duplicating successful exchanges.
 Successful replies use one `LLM.complete` call through the existing low-effort client and
 usage accounting. Assistant messages never enter the counterpart's conversation.
+
+
+## Opportunity-based model (2026-10-28, in progress)
+
+The new specification supersedes the heuristic skill-score profile described above.
+`profiling/observations.py` implements all six numeric opportunity/occurrence detectors
+and the fact/rapport counts. `profiling/tagging.py` supplies a fixed role-scoped rubric
+and validates a whole annotation batch before applying it. `profiling/belief.py` contains
+the discounted Beta filter, exact credible intervals, empirical credit cost model, and
+UCB/greedy/random/no-focus policies. `profile.py` rebuilds that state from finished
+transcripts; the app displays probabilities, credible intervals, and opportunity counts.
+See decision 0008 for the two source-document discrepancies and missing-data behavior.
+
+The reward denominator is now the exact counterpart-feasible user optimum, found with
+an additive Pareto-frontier dynamic program. `simulation.episode_score` is terminal R;
+`episode_value` remains a raw-point helper but no longer credits unaccepted offers.
+`Turn.tags`, `Session.seed`, `Session.max_user_turns`, and counterpart focus/floor fields
+are additive schema changes. Invalid combined formal actions fail before session mutation.
+
+Still being integrated: counterpart hooks, fresh-selection/scoring counterfactual batches,
+empirical population costs, API spend reservation, and sim3 evaluation. Existing feedback
+rollouts still use raw points until that integration is complete.

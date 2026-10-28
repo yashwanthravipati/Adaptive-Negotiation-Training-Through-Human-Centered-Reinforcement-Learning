@@ -7,11 +7,10 @@ negotiators with known, injected weaknesses (simulation.ScriptedUser).
 """
 
 from negotrain.profiling.features import FLAG_DESCRIPTIONS, extract_features, flags
-from negotrain.profiling.profile import SKILLS, NegotiatorProfile, build_profile
+from negotrain.profiling.profile import NegotiatorProfile, build_profile
 
 __all__ = [
     "FLAG_DESCRIPTIONS",
-    "SKILLS",
     "NegotiatorProfile",
     "build_profile",
     "extract_features",

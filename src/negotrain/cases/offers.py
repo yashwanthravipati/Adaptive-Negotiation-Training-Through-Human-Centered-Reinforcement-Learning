@@ -11,6 +11,7 @@ from __future__ import annotations
 import itertools
 import math
 from collections.abc import Iterator
+from functools import lru_cache
 
 from negotrain.cases.scoring import score_offer
 from negotrain.schemas import Case, Offer
@@ -58,10 +59,59 @@ def claim(case: Case, role_id: str, offer: Offer) -> float | None:
 
 
 def surplus_share(case: Case, role_id: str, pts: float) -> float:
-    """Points as a fraction of the gap between walking away (0) and the best deal (1)."""
+    """R: surplus relative to the best counterpart-acceptable package, without clipping."""
     rv = case.role(role_id).reservation_value
-    best = best_points(case, role_id)
-    return (pts - rv) / (best - rv) if best > rv else 0.0
+    best = feasible_best_points(case, role_id)
+    if best <= rv:
+        raise ValueError("surplus share is undefined: no positive feasible user surplus")
+    return (pts - rv) / (best - rv)
+
+
+def feasible_best_points(case: Case, role_id: str) -> float:
+    """Exact P^U_max, respecting both roles' explicit hard constraints.
+
+    Additive utilities permit an exact Pareto frontier dynamic program. No greedy
+    approximation is used in the reward denominator, even for large Cartesian spaces.
+    Cache only immutable economics, so editing a point table invalidates the cache.
+    """
+    own, other = case.role(role_id), case.other_role(role_id)
+    tables = []
+    for issue in case.issues:
+        banned = {
+            option
+            for role in (own, other)
+            for constraint in role.constraints
+            if constraint.hard
+            for option in constraint.disallowed.get(issue.id, [])
+        }
+        tables.append(
+            tuple(
+                (own.points[issue.id][o], other.points[issue.id][o])
+                for o in issue.option_ids()
+                if o not in banned
+            )
+        )
+    return _feasible_best(tuple(tables), other.reservation_value)
+
+
+@lru_cache(maxsize=128)
+def _feasible_best(tables: tuple, reservation: float) -> float:
+    frontier = {0.0: 0.0}  # counterpart points -> best user points
+    for options in tables:
+        expanded: dict[float, float] = {}
+        for cp, up in frontier.items():
+            for u, c in options:
+                expanded[cp + c] = max(expanded.get(cp + c, -math.inf), up + u)
+        frontier = {}
+        best = -math.inf
+        for cp, up in sorted(expanded.items(), reverse=True):
+            if up > best:
+                frontier[cp] = up
+                best = up
+    values = [up for cp, up in frontier.items() if cp >= reservation]
+    if not values:
+        raise ValueError("no package meets the counterpart's walk-away and hard constraints")
+    return max(values)
 
 
 def complete_with(case: Case, offer: Offer | None, fill: Offer) -> Offer:

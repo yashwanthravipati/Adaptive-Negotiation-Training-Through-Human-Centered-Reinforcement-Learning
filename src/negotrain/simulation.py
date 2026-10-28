@@ -8,7 +8,7 @@ and recovered.
 
 from __future__ import annotations
 
-from negotrain.cases.offers import best_points, closest_offer, points
+from negotrain.cases.offers import best_points, closest_offer, points, surplus_share
 from negotrain.cases.scoring import score_offer
 from negotrain.counterpart.rule_based import Counterpart
 from negotrain.schemas import Case, Session, Turn
@@ -80,16 +80,17 @@ def run_episode(
 
 
 def episode_value(case: Case, session: Session) -> float:
-    """The user's points from an episode. Unfinished episodes are valued at the best deal on
-    the table (the counterpart's latest complete offer, which the user could accept) or
-    walking away, whichever is higher."""
+    """Realized points only: an unaccepted standing offer has no terminal value."""
     role = case.role(session.user_role_id)
     if session.status == "agreed" and session.agreement is not None:
         return points(case, role.id, session.agreement)
-    if session.status == "active":
-        theirs = session.latest_offer_from("counterpart")
-        if theirs is not None and theirs.is_complete(case):
-            result = score_offer(case, role.id, theirs)
-            if result.valid and result.points is not None:
-                return max(role.reservation_value, result.points)
     return role.reservation_value
+
+
+def episode_score(case: Case, session: Session) -> float | None:
+    """The only rehearsal reward, R. Custom agreements are unscored; no deal is zero."""
+    if session.status != "agreed" or session.agreement is None:
+        return 0.0
+    if session.agreement.custom_terms:
+        return None
+    return surplus_share(case, session.user_role_id, episode_value(case, session))

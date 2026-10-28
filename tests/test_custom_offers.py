@@ -148,8 +148,8 @@ def test_custom_debrief_preserves_unknown_metrics_and_does_not_penalize_profile(
     assert features["agreement"] == 1
     assert not flags(session, case)
     profile = build_profile("local", [(session, case)])
-    for key in ("anchoring", "concession_discipline", "value_creation", "value_claiming"):
-        assert profile.skill(key).n == 0
+    for key in ("error:1", "error:2", "error:3", "error:4", "error:6"):
+        assert profile.belief.components[key].opportunities == 0
     assert next_scenario(profile, [(session, case)]).tier == 3
     report = build_report(session, case)
     assert "no defined point score" in report.headline

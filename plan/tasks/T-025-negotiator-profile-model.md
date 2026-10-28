@@ -21,3 +21,8 @@ For example, per-feature z-scores against a reference population (simulated user
 
 ## Log
 - 2026-10-25: MVP branch: profile.py, six skills, shrinkage to 0.5 (prior weight 2), confidence n/(n+2); rebuilt from all sessions; My profile page.
+- 2026-10-28: Reimplementation in progress against new-spec/report: exact feasible
+  surplus reward, six opportunity detectors, case-scoped facts, fixed tagging rubric,
+  discounted Beta beliefs, cost-weighted UCB/baselines, profile UI with credible intervals,
+  and visible 20-user-move deadline. Replaces heuristic skill scores. Source-document
+  discrepancies and remaining integration are recorded in decision 0008.

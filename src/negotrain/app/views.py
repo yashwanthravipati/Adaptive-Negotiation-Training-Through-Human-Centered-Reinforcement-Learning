@@ -43,7 +43,7 @@ from negotrain.feedback import (
 )
 from negotrain.llm import ClaudeCodeLLM, ClaudeLLM, LLMRefusal, check_api_key
 from negotrain.prep import Prep, build_prep, prep_key
-from negotrain.profiling import FLAG_DESCRIPTIONS, SKILLS, build_profile, extract_features
+from negotrain.profiling import build_profile, extract_features
 from negotrain.schemas import Case, CounterpartProfile, Offer, Participant, Session, Turn
 from negotrain.sessions import SessionStore
 
@@ -653,14 +653,15 @@ def start_rehearsal(
         user_role_id=role_id,
         counterpart_role_id=case.other_role(role_id).id,
         counterpart_profile=counterpart_for(spec, random.Random(seed)),
-        notes=f"seed={seed}; {spec.rationale}",
+        seed=seed,
+        notes=spec.rationale,
     )
     st.session_state["session"] = session
     st.session_state["case"] = case
     st.session_state.pop("preset", None)
     st.session_state.pop("preset_role", None)
     SessionStore().save(session)
-    if counterpart_opens:
+    if counterpart_opens or spec.focus == "error:3":
         _counterpart_reply(session, case)
     return session
 
@@ -798,6 +799,7 @@ def page_rehearse() -> None:
         ]
     )
 
+    st.caption(f"Deadline: {session.max_user_turns - session.user_turns} user moves remaining.")
     chat, side = st.columns([3, 2], gap="large")
     with side:
         mine, theirs = session.latest_offer_from("user"), session.latest_offer_from("counterpart")
@@ -1110,35 +1112,26 @@ def page_profile() -> None:
     hist = history(p.id)
     prof = build_profile(p.id, hist)
     st.caption(
-        f"Based on {prof.n_sessions} finished session(s). Scores start at 0.5 and move with "
-        "evidence; confidence grows with the number of sessions."
+        f"Based on {prof.n_sessions} finished sessions. Estimates use opportunities "
+        "and occurrences, with older evidence discounted once per session."
     )
-    for s in prof.skills:
-        label = f"{s.label}: {s.score:.2f}  ·  confidence {s.confidence:.0%}"
-        st.progress(min(1.0, max(0.0, s.score)), text=label)
-        st.caption(s.description)
-    a, b = st.columns(2)
-    with a:
-        st.markdown("**Strengths**")
-        for k in prof.strengths or []:
-            st.markdown(f"- {SKILLS[k][0]}")
-        if not prof.strengths:
-            st.caption("Not enough evidence yet.")
-    with b:
-        st.markdown("**Weaknesses**")
-        for k in prof.weaknesses or []:
-            st.markdown(f"- {SKILLS[k][0]}")
-        if not prof.weaknesses:
-            st.caption("None identified yet.")
-    if prof.flag_counts:
-        st.markdown("**Recurring patterns**")
-        st.dataframe(
-            [
-                {"Pattern": FLAG_DESCRIPTIONS[k], "Sessions": n}
-                for k, n in sorted(prof.flag_counts.items(), key=lambda kv: -kv[1])
-            ],
-            hide_index=True,
-            width="stretch",
+    rows = []
+    for key, posterior in prof.belief.components.items():
+        lo, hi = posterior.interval()
+        rows.append(
+            {
+                "Component": prof.labels[key],
+                "Probability": round(posterior.mean, 3),
+                "95% credible interval": f"{lo:.2f}–{hi:.2f}",
+                "Opportunities": posterior.opportunities,
+                "Meaning": "error rate" if key.startswith("error:") else "success rate",
+            }
+        )
+    st.dataframe(rows, hide_index=True, width="stretch")
+    if prof.untagged_user_turns:
+        st.caption(
+            f"{prof.untagged_user_turns} user turns lack fact/rapport annotations; "
+            "they are excluded from those estimates."
         )
 
     lib = library()
