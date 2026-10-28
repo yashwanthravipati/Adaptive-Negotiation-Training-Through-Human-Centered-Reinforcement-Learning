@@ -85,14 +85,11 @@ where $b_0$ is the starting belief, Update is equation~\eqref{eq:update}, $\pi$ 
 Feedback works by replaying the negotiation from key turns with the user's move swapped for an alternative, and reporting how much each alternative would have changed $R$.
 
 \paragraph{Implemented policy and comparison baselines.}
-Adaptive and greedy rank practice targets by the user's estimated weakness, the associated
-score loss and the expected opportunities to practise it.
-Adaptive (UCB) adds an uncertainty bonus, controlled by $\kappa$, while greedy omits it;
-both update their estimates after each rehearsal.
-Random focus chooses uniformly among targets, and no focus sets no target, but all four
-policies follow the same difficulty schedule and receive feedback.
-Tuning on a separate development population selected $\kappa=0$, so adaptive and greedy
-used the same selection rule in this experiment.
+We have several strategies for choosing the focus of the next negotiation rehearsal.
+Greedy selects the user's main estimated weakness; adaptive does the same but gives
+extra priority to areas we know less about.
+Random chooses uniformly, and no focus sets no target, but all four policies use the
+same difficulty schedule and receive feedback.
 
 \paragraph{Learning objectives.}
 A user's \emph{competence} is their expected score on a fixed set $\mathcal{D}$ of held-out cases and tiers, played with no focus and no feedback. Formally,
