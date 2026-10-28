@@ -104,12 +104,15 @@ The coach's objective is the expected gain in competence over a training run of 
 \section{Implementation and preliminary evaluation}
 
 \paragraph{Completed system.}
-We implemented five code-controlled counterpart tiers, role-specific information access,
-exact surplus-share scoring, six opportunity-based error detectors, fact/rapport tracking,
-discounted Beta beliefs, four practice-selection policies and post-session counterfactual
-coaching. The default filter preserves the prior while discounting evidence;
-equation~\eqref{eq:update} is available as a sensitivity variant. The evaluated deadline
-is 20 user moves plus counterpart replies.
+We have built a working app where users rehearse a negotiation and receive feedback
+afterwards. The LLM writes the counterpart's dialogue, while code controls its offers
+and concessions so that we can consistently adjust how hard it bargains. After the
+session, the coach revisits key decisions and simulates alternative moves to estimate
+how they might have changed the outcome. It also tracks which mistakes recur and how
+many chances the user had to avoid them, building a profile that helps choose what to
+practise next.\footnote{The evaluated implementation preserves the Beta prior while
+discounting past evidence; equation~\eqref{eq:update} is retained as a sensitivity variant.
+Sessions allow 20 user moves plus counterpart replies.}
 
 \paragraph{Evaluation design.}
 We used \texttt{sim3} with inferred utilities and walk-away values (six issues, 729 packages),
