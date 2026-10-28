@@ -111,7 +111,10 @@ measure realized detector rates and held-out no-focus competence G. These are se
 experiments: policy propensities are not asserted to equal conditional error rates.
 LLM personas receive role-projected case materials, pre-session focus callouts, and prior
 post-session feedback; their states are not manually improved by the synthetic Learn map.
-Independent users may run concurrently; per-turn checkpoints make interrupted episodes
+Independent users may run concurrently; requests wait for active budget reservations to
+settle when that can free enough capacity, while unknown charges stay reserved. Static
+role/persona prompts have explicit cache breakpoints. Each user can be recovered separately
+without resampling, and failure tracebacks remain private. Per-turn checkpoints make interrupted episodes
 resumable, and user-level paired bootstrap intervals preserve sampling dependence.
 
 `results/calibration/` holds population costs and tuned lambda/kappa, matched by full case

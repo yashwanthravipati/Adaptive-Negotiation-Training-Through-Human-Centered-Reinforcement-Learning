@@ -38,3 +38,5 @@ Shared by T-017, T-018, T-021, and T-026. Use concurrent.futures for parallel ep
   Added deterministic parallel users, pre-session focus instructions for LLM users,
   and exact-case/role calibration loading in the app. Human tagging validation and
   human transfer remain unmeasured.
+
+- 2026-10-28: Extracted independently recoverable train_user and immediate private error logging. Recoveries preserve original sampled users, seeds, completed turns and feedback; failed users are not replaced. The live cohort remains in progress.

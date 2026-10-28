@@ -129,7 +129,7 @@ class ClaudeLLM:
         return {
             "model": self.model,
             "max_tokens": max_tokens,
-            "system": system,
+            "system": [{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}],
             "messages": list(messages),
             "output_config": {"effort": self.effort},
             # The system prompt (case + role sheet) is identical across turns of a session.
@@ -166,7 +166,7 @@ class ClaudeLLM:
         # as hard bounds. Normal usage releases the unused reserve immediately.
         prices = MODEL_PRICES[self.model]
         bound = 2 * prices["input"] + max_tokens * prices["output"] / 1e6
-        reservation = self.ledger.reserve(self.model, bound)
+        reservation = self.ledger.reserve(self.model, bound, wait_seconds=180)
         raw = None
         try:
             request = self._request(system, messages, max_tokens)

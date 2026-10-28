@@ -127,3 +127,17 @@ def test_structured_output_settles_before_validation_and_retry(tmp_path):
     assert [r["max_tokens"] for r in client.requests] == [100, 200]
     assert ledger.snapshot()["actual_usd"] == pytest.approx(0.0012)
     assert llm.usage.calls == 2
+
+
+def test_waiting_reservation_uses_only_released_budget(tmp_path):
+    ledger = SpendLedger(tmp_path / "budget", 10)
+    first = ledger.reserve("one", 8)
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        future = pool.submit(ledger.reserve, "two", 8, wait_seconds=1)
+        ledger.settle(first, 1, {})
+        second = future.result()
+    assert ledger.snapshot()["accounted_usd"] == 9
+    ledger.uncertain(second, "Timeout")
+    with pytest.raises(BudgetExceeded):
+        ledger.reserve("three", 8, wait_seconds=1)
+    assert ledger.snapshot()["accounted_usd"] == 9

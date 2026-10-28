@@ -9,6 +9,7 @@ from __future__ import annotations
 import hashlib
 import json
 import random
+import traceback
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
@@ -429,66 +430,75 @@ def oracle_evaluate(costs, tuning, users, seed):
     return rows, summary
 
 
+def train_user(experiment, costs, tuning, uid, original, seed):
+    """Independent, checkpointed unit of work; safe to recover a failed user alone."""
+    user_rows = []
+    baseline = experiment.probe(f"user{uid}_baseline", original, seed + 1009 * uid)
+    for policy in POLICIES:
+        traits = original.model_copy(deep=True)
+        personal = costs.model_copy(deep=True)
+        belief = initial_belief(experiment.case, experiment.role, tuning["selected"]["forgetting"])
+        feedback = []
+        focuses = []
+        for t, tier in enumerate(TRAINING_TIERS):
+            focus = choose_focus(
+                belief,
+                personal,
+                policy=policy,
+                kappa=tuning["selected"]["kappa"],
+                rng=random.Random(seed + uid * 1009 + t),
+            )
+            focuses.append(focus)
+            s = experiment.episode(
+                f"user{uid}_{policy}_train{t}",
+                traits,
+                tier,
+                focus,
+                seed + uid * 1009 + t,
+                feedback,
+            )
+            obs = observe(s, experiment.case)
+            debrief = experiment.feedback(s)
+            feedback.append(debrief.report.model_dump_json())
+            for e in debrief.counterfactuals.estimates:
+                for key in belief.components:
+                    if e.delta is not None and e.turn_index in failure_turns(s, obs, key):
+                        personal.add(key, e.delta)
+            belief.update(obs)
+            if experiment.user_llm is None:
+                traits.learn(focus)
+        after = experiment.probe(f"user{uid}_{policy}_after", traits, seed + uid * 1009, feedback)
+        user_rows.append(
+            {
+                "user": uid,
+                "policy": policy,
+                "baseline_G": baseline,
+                "final_G": after,
+                "competence_gain": after - baseline,
+                "focuses": focuses,
+                "initial_traits": original.model_dump(),
+                "population": "LLM persona" if experiment.user_llm else "grounded scripted",
+            }
+        )
+    print(f"training user {uid + 1} complete", flush=True)
+    write_json(experiment.raw / f"user{uid}.training.json", user_rows)
+    return user_rows
+
+
 def grounded_training(experiment, costs, tuning, users, seed, workers=1):
     rng = random.Random(seed)
     originals = [VirtualTraits.sample(rng) for _ in range(users)]
 
     def run_user(uid):
-        user_rows = []
-        original = originals[uid]
-        baseline = experiment.probe(f"user{uid}_baseline", original, seed + 1009 * uid)
-        for policy in POLICIES:
-            traits = original.model_copy(deep=True)
-            personal = costs.model_copy(deep=True)
-            belief = initial_belief(
-                experiment.case, experiment.role, tuning["selected"]["forgetting"]
+        try:
+            return train_user(experiment, costs, tuning, uid, originals[uid], seed)
+        except Exception:
+            # Tracebacks stay private and are available immediately, while other users
+            # finish independently. Never replace a failed user with a fresh sample.
+            write_json(
+                experiment.raw / f"user{uid}.error.json", {"traceback": traceback.format_exc()}
             )
-            feedback = []
-            focuses = []
-            for t, tier in enumerate(TRAINING_TIERS):
-                focus = choose_focus(
-                    belief,
-                    personal,
-                    policy=policy,
-                    kappa=tuning["selected"]["kappa"],
-                    rng=random.Random(seed + uid * 1009 + t),
-                )
-                focuses.append(focus)
-                s = experiment.episode(
-                    f"user{uid}_{policy}_train{t}",
-                    traits,
-                    tier,
-                    focus,
-                    seed + uid * 1009 + t,
-                    feedback,
-                )
-                obs = observe(s, experiment.case)
-                debrief = experiment.feedback(s)
-                feedback.append(debrief.report.model_dump_json())
-                for e in debrief.counterfactuals.estimates:
-                    for key in belief.components:
-                        if e.delta is not None and e.turn_index in failure_turns(s, obs, key):
-                            personal.add(key, e.delta)
-                belief.update(obs)
-                if experiment.user_llm is None:
-                    traits.learn(focus)
-            after = experiment.probe(
-                f"user{uid}_{policy}_after", traits, seed + uid * 1009, feedback
-            )
-            user_rows.append(
-                {
-                    "user": uid,
-                    "policy": policy,
-                    "baseline_G": baseline,
-                    "final_G": after,
-                    "competence_gain": after - baseline,
-                    "focuses": focuses,
-                    "initial_traits": original.model_dump(),
-                    "population": "LLM persona" if experiment.user_llm else "grounded scripted",
-                }
-            )
-        print(f"training user {uid + 1}/{users} complete", flush=True)
-        return user_rows
+            raise
 
     rows = []
     # Independent users share only immutable case data and the atomic API ledger.

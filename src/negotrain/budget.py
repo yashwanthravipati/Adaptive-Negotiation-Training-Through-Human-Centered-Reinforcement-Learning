@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import math
 import sqlite3
+import time
 from pathlib import Path
 from uuid import uuid4
 
@@ -37,7 +38,30 @@ class SpendLedger:
             raise ValueError("cost must be finite and nonnegative")
         return math.ceil(dollars * 1_000_000)
 
-    def reserve(self, model: str, dollars: float) -> str:
+    def reserve(self, model: str, dollars: float, *, wait_seconds: float = 0) -> str:
+        """Wait only for live reservations that can release enough budget; never raise cap."""
+        deadline = time.monotonic() + wait_seconds
+        while True:
+            try:
+                return self._reserve(model, dollars)
+            except BudgetExceeded:
+                with self._connect() as db:
+                    cap = db.execute("SELECT cap FROM budget WHERE id=1").fetchone()[0]
+                    # The gateway timeout is 180s. Stale/crashed reservations stay charged.
+                    pending = db.execute("""SELECT COALESCE(SUM(reserved),0) FROM requests
+                        WHERE actual IS NULL AND state='reserved'
+                        AND created >= datetime('now','-180 seconds')""").fetchone()[0]
+                    accounted = db.execute("""SELECT COALESCE(SUM(COALESCE(actual,reserved)),0)
+                        FROM requests""").fetchone()[0]
+                if (
+                    time.monotonic() >= deadline
+                    or pending == 0
+                    or accounted - pending + self._micro(dollars) > cap
+                ):
+                    raise
+                time.sleep(0.1)
+
+    def _reserve(self, model: str, dollars: float) -> str:
         reserve = self._micro(dollars)
         with self._connect() as db:
             db.execute("BEGIN IMMEDIATE")
