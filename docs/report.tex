@@ -94,4 +94,58 @@ The coach's objective is the expected gain in competence over a training run of 
 \max_\pi \; V(\pi) = \E_u \big[ G(s_K) - G(s_0) \big], \qquad s_K \text{ produced by running } \mathcal{C} \text{ with policy } \pi \text{ on user } u.
 \end{equation}
 
+\section{Implementation and preliminary evaluation}
+
+\paragraph{Completed system.}
+We implemented five code-controlled counterpart tiers, role-specific information access,
+exact surplus-share scoring, six opportunity-based error detectors, fact/rapport tracking,
+discounted Beta beliefs, four practice-selection policies and post-session counterfactual
+coaching. The default filter preserves the prior while discounting evidence;
+equation~\eqref{eq:update} is available as a sensitivity variant. The evaluated deadline
+is 20 user moves plus counterpart replies.
+
+\paragraph{Evaluation design.}
+We used \texttt{sim3} with inferred utilities and walk-away values (six issues, 729 packages),
+since official numeric scores were unavailable. After independent calibration and tuning,
+7,960 offline episodes tested tier control, profile recovery, counterfactual stability and
+learning in 128 scripted users; additional diagnostics tested a 512-user Binomial oracle
+and utility sensitivity. Eight randomly sampled LLM personas completed 280 live episodes.
+Each of four policies trained for five rehearsals at tiers $(2,2,4,4,4)$; $G$ averages
+no-focus probes at tiers $(1,3,5)$ on the same case. Intervals use 2,000 user-level
+bootstrap resamples.
+
+\paragraph{Offline results.}
+Mean $R$ decreased from 0.559 at tier 1 to 0.224 at tier 5 (Spearman $\rho=-1$),
+with zero schedule violations across all 7,960 offline and 280 live episodes.
+Profile recovery was uneven: ignoring-issue RMSE was 0.095, whereas unreciprocated-concession
+RMSE was 0.331 against independent empirical reference rates. Counterfactual estimates
+using four versus sixteen rollouts had rank correlation 0.839 across 26 critical turns.
+The oracle improved its own error-cost objective, but adaptive scripted-user competence
+gain was $-0.0059$ (95\% interval $[-0.0163,0.0046]$), providing no evidence of improved $G$.
+
+\paragraph{Live results.}
+From a shared mean baseline $G=0.3807$, practice with coaching produced the following gains:
+\begin{center}
+\begin{tabular}{lcc}
+\hline
+Practice policy & Mean $G$ gain & 95\% interval \\
+\hline
+Adaptive & 0.0871 & $[0.0606,0.1117]$ \\
+Greedy & 0.0672 & $[0.0369,0.0975]$ \\
+Random focus & 0.0549 & $[0.0265,0.0843]$ \\
+No focus & 0.0786 & $[0.0464,0.1203]$ \\
+\hline
+\end{tabular}
+\end{center}
+Adaptive minus random gain was $0.0322$ ($[0.0180,0.0483]$), but adaptive minus no focus
+was $0.0085$ ($[-0.0303,0.0436]$). Development selected uncertainty bonus $\kappa=0$,
+so adaptive and greedy use the same rule; their live differences reflect model randomness.
+
+\paragraph{Interpretation.}
+LLM users improved after practice with coaching, but every policy received feedback,
+preventing identification of coaching's independent effect. Adaptive targeting did not
+clearly outperform no-focus coaching. Eight personas, inferred utilities, same-case probes
+and runtime repairs make these results exploratory; human improvement remains untested.
+Full diagnostics: \texttt{docs/results/sim3\_evaluation.md}.
+
 \end{document}
