@@ -71,7 +71,7 @@ def test_gateway_reserves_before_network_and_settles_provider_usage(tmp_path):
     llm = ClaudeLLM(client=client, ledger=ledger)
     assert llm.complete("s", [{"role": "user", "content": "hi"}], max_tokens=100) == "hello"
     assert client.options["max_retries"] == 0
-    assert client.requests[0]["fallbacks"] == []
+    assert "fallbacks" not in client.requests[0]
     assert ledger.snapshot()["actual_usd"] == pytest.approx(0.0006)
     assert ledger.snapshot()["unresolved_requests"] == 0
 

@@ -9,6 +9,7 @@ from __future__ import annotations
 import hashlib
 import json
 import random
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import numpy as np
@@ -18,7 +19,14 @@ from negotrain.cases.offers import points
 from negotrain.counterpart import TIERS, CounterpartAgent, RuleBasedCounterpart
 from negotrain.feedback import analyze_session, build_report
 from negotrain.profiling.belief import BeliefState, BetaBelief, CostModel, choose_focus
-from negotrain.profiling.observations import ERRORS, Count, Observations, case_facts, observe
+from negotrain.profiling.observations import (
+    ERRORS,
+    Count,
+    Observations,
+    case_facts,
+    failure_turns,
+    observe,
+)
 from negotrain.profiling.tagging import tag_session
 from negotrain.schemas import Case, Session
 from negotrain.simulation import episode_score
@@ -32,7 +40,16 @@ PROBE_TIERS = (1, 3, 5)
 def write_json(path: Path, value) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_suffix(path.suffix + ".tmp")
-    temporary.write_text(json.dumps(value, indent=2, sort_keys=True, allow_nan=False))
+    if isinstance(value, list):
+        # One record per line keeps public experiment tables reviewable in git.
+        content = (
+            "[\n"
+            + ",\n".join(json.dumps(row, sort_keys=True, allow_nan=False) for row in value)
+            + "\n]"
+        )
+    else:
+        content = json.dumps(value, indent=2, sort_keys=True, allow_nan=False)
+    temporary.write_text(content + "\n")
     temporary.replace(path)
 
 
@@ -116,7 +133,7 @@ class Experiment:
             seed=seed,
         )
         if self.user_llm:
-            user = LLMUser(self.case, self.role, traits, self.user_llm, feedback)
+            user = LLMUser(self.case, self.role, traits, self.user_llm, feedback, focus)
         else:
             user = VirtualUser(self.case, self.role, traits, seed + 17)
         if saved:
@@ -256,8 +273,9 @@ def steering(experiment: Experiment, users: int, seed: int):
             ),
             "mean_focused_opportunities": float(np.mean([r["counts"][key]["o"] for r in subset])),
             "hook_application_rate": (
-                sum(r["hook_applied"] for r in subset)
-                / max(1, sum(r["hook_attempts"] for r in subset))
+                sum(r["hook_applied"] for r in subset) / sum(r["hook_attempts"] for r in subset)
+                if sum(r["hook_attempts"] for r in subset)
+                else None
             ),
         }
     summary = {
@@ -270,16 +288,6 @@ def steering(experiment: Experiment, users: int, seed: int):
     write_json(experiment.root / "steering_rows.json", records)
     write_json(experiment.root / "steering.json", summary)
     return summary
-
-
-def failure_turns(session, observation, key):
-    count = observation.counts[key]
-    if key in ERRORS:
-        return set(count.turns)
-    eligible = {t.index for t in session.turns if t.speaker == "user" and t.tags is not None}
-    if key.endswith(":walkaway"):
-        eligible = {t.index for t in session.turns if t.speaker == "user" and (t.offer or t.accept)}
-    return eligible - set(count.turns)
 
 
 def calibrate(experiment: Experiment, users: int, seed: int):
@@ -421,11 +429,13 @@ def oracle_evaluate(costs, tuning, users, seed):
     return rows, summary
 
 
-def grounded_training(experiment, costs, tuning, users, seed):
+def grounded_training(experiment, costs, tuning, users, seed, workers=1):
     rng = random.Random(seed)
-    rows = []
-    for uid in range(users):
-        original = VirtualTraits.sample(rng)
+    originals = [VirtualTraits.sample(rng) for _ in range(users)]
+
+    def run_user(uid):
+        user_rows = []
+        original = originals[uid]
         baseline = experiment.probe(f"user{uid}_baseline", original, seed + 1009 * uid)
         for policy in POLICIES:
             traits = original.model_copy(deep=True)
@@ -465,7 +475,7 @@ def grounded_training(experiment, costs, tuning, users, seed):
             after = experiment.probe(
                 f"user{uid}_{policy}_after", traits, seed + uid * 1009, feedback
             )
-            rows.append(
+            user_rows.append(
                 {
                     "user": uid,
                     "policy": policy,
@@ -477,8 +487,16 @@ def grounded_training(experiment, costs, tuning, users, seed):
                     "population": "LLM persona" if experiment.user_llm else "grounded scripted",
                 }
             )
+        print(f"training user {uid + 1}/{users} complete", flush=True)
+        return user_rows
+
+    rows = []
+    # Independent users share only immutable case data and the atomic API ledger.
+    # Ordered map keeps the public results deterministic across worker counts.
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        for user_rows in pool.map(run_user, range(users)):
+            rows.extend(user_rows)
             write_json(experiment.root / "training_rows.json", rows)
-        print(f"training user {uid + 1}/{users}", flush=True)
     by_policy = {p: [r for r in rows if r["policy"] == p] for p in POLICIES}
     summary = {
         p: {

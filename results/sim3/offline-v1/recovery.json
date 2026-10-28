@@ -1,0 +1,38 @@
+{
+  "error:1": {
+    "coverage_of_mc_reference": 0.921875,
+    "propensity_vs_realized_spearman": 0.11461088733958309,
+    "rmse_vs_reference": 0.24887737690204983,
+    "users_with_reference_opportunities": 64
+  },
+  "error:2": {
+    "coverage_of_mc_reference": 0.65625,
+    "propensity_vs_realized_spearman": 0.27938920163628694,
+    "rmse_vs_reference": 0.3308689124976712,
+    "users_with_reference_opportunities": 64
+  },
+  "error:3": {
+    "coverage_of_mc_reference": 0.90625,
+    "propensity_vs_realized_spearman": 0.8785856340292194,
+    "rmse_vs_reference": 0.23937280233816913,
+    "users_with_reference_opportunities": 64
+  },
+  "error:4": {
+    "coverage_of_mc_reference": 0.9375,
+    "propensity_vs_realized_spearman": 0.7888330834007358,
+    "rmse_vs_reference": 0.23653491757083178,
+    "users_with_reference_opportunities": 64
+  },
+  "error:5": {
+    "coverage_of_mc_reference": 0.984375,
+    "propensity_vs_realized_spearman": 0.9871313592989932,
+    "rmse_vs_reference": 0.09543012526348507,
+    "users_with_reference_opportunities": 64
+  },
+  "error:6": {
+    "coverage_of_mc_reference": 0.828125,
+    "propensity_vs_realized_spearman": 0.34148016769347894,
+    "rmse_vs_reference": 0.15904692922469377,
+    "users_with_reference_opportunities": 64
+  }
+}

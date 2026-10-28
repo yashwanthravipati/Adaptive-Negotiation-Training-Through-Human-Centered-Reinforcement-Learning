@@ -184,3 +184,14 @@ def observe(session: Session, case: Case) -> Observations:
     return Observations(
         counts=counts, score=score, untagged_user_turns=untagged, excluded_numeric_turns=excluded
     )
+
+
+def failure_turns(session: Session, observation: Observations, key: str) -> set[int]:
+    """Observed errors or eligible turns lacking a positive fact/rapport label."""
+    count = observation.counts[key]
+    if key in ERRORS:
+        return set(count.turns)
+    eligible = {t.index for t in session.turns if t.speaker == "user" and t.tags is not None}
+    if key.endswith(":walkaway"):
+        eligible = {t.index for t in session.turns if t.speaker == "user" and (t.offer or t.accept)}
+    return eligible - set(count.turns)

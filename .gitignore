@@ -23,6 +23,7 @@ data/sessions/*
 data/study/
 data/participants/
 results/**/raw/
+results/**/.lock
 
 # OS / editors
 .DS_Store

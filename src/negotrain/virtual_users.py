@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field
 from negotrain.cases.offers import best_points, indexed_offer, own_offer_table, points
 from negotrain.cases.scoring import score_offer
 from negotrain.counterpart.agent import CounterpartMove
+from negotrain.curriculum import focus_callout
 from negotrain.llm import LLM
 from negotrain.profiling.observations import ERRORS, case_facts
 from negotrain.schemas import Case, Session, Turn, TurnTags
@@ -141,7 +142,9 @@ class VirtualUser:
         current = points(self.case, self.role.id, mine) if mine else self.rv + self.span
         low = their_value < self.rv + 0.25 * self.span
         knows_walkaway = self.rng.random() < self.traits.awareness
-        admissible = their_value >= self.rv or not knows_walkaway
+        admissible = (their_value >= self.rv or not knows_walkaway) and (
+            theirs is None or not score_offer(self.case, self.role.id, theirs).violations
+        )
         if (
             theirs
             and admissible
@@ -196,6 +199,7 @@ class LLMUser:
         traits: VirtualTraits,
         llm: LLM,
         feedback: list[str] | None = None,
+        focus: str | None = None,
     ):
         self.case, self.role_id, self.llm = case, role_id, llm
         visible = {
@@ -220,6 +224,7 @@ invent missing role facts. Only formal actions change the agreement.\n"""
                 "fact_awareness": traits.awareness,
                 "rapport": traits.rapport,
                 "past_coaching": (feedback or [])[-5:],
+                "pre_session_practice_callout": focus_callout(focus) if focus else None,
             }
         )
 

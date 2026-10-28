@@ -44,6 +44,7 @@ from negotrain.feedback import (
 from negotrain.llm import ClaudeCodeLLM, ClaudeLLM, LLMRefusal, check_api_key
 from negotrain.prep import Prep, build_prep, prep_key
 from negotrain.profiling import build_profile, extract_features
+from negotrain.profiling.profile import load_calibration
 from negotrain.profiling.tagging import tag_session
 from negotrain.schemas import Case, CounterpartProfile, Offer, Participant, Session, Turn
 from negotrain.sessions import SessionStore
@@ -185,7 +186,9 @@ def current_profile(pid: str, hist: list[tuple[Session, Case]]):
         debrief = store.load_artifact(session.id, "feedback", Debrief)
         if debrief and debrief.counterfactuals:
             reports[session.id] = debrief.counterfactuals
-    return build_profile(pid, hist, reports=reports)
+    context = active_scenario()
+    calibration = load_calibration(*context, config.REPO_ROOT / "results" / "calibration")
+    return build_profile(pid, hist, reports=reports, context=context, calibration=calibration)
 
 
 def go(page: str) -> None:

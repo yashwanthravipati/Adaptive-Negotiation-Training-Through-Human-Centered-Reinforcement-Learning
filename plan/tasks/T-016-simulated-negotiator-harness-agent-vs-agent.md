@@ -16,8 +16,8 @@ Shared by T-017, T-018, T-021, and T-026. Use concurrent.futures for parallel ep
 
 ## Acceptance criteria
 - [x] run_episode(case, user_policy, counterpart, max_turns) -> Session
-- [ ] Scripted and LLM-persona user policies
-- [ ] Outputs to results/<experiment>/ with config.json; seeded
+- [x] Scripted and LLM-persona user policies
+- [x] Outputs to results/<experiment>/ with config.json; seeded
 - [ ] Prints an estimated cost and asks before large runs
 
 ## Log
@@ -29,3 +29,12 @@ Shared by T-017, T-018, T-021, and T-026. Use concurrent.futures for parallel ep
   rates. LLM users receive prior feedback; only the synthetic model imposes Learn.
   scripts/evaluate.py separates calibration/development/test seeds and preserves raw
   transcripts privately. Pending: execute sim3 suite and live suite after export approval.
+
+- 2026-10-28: Offline sim3 suite complete: 8 calibration, 64 development,
+  512 oracle test, 32 steering, 64 recovery, 128 grounded-learning users.
+  Tier R decreases monotonically (rho=-1). Adaptive held-out G gain -0.00592,
+  95% user-bootstrap CI [-0.01634, 0.00462]; no demonstrated transfer improvement.
+  Development selected lambda=.5, kappa=0, so the tuned UCB policy equals greedy.
+  Added deterministic parallel users, pre-session focus instructions for LLM users,
+  and exact-case/role calibration loading in the app. Human tagging validation and
+  human transfer remain unmeasured.

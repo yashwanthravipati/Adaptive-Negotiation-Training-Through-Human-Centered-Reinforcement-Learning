@@ -93,7 +93,9 @@ def next_scenario(
         or not case_ids
         or any(key.startswith(f"fact:{cid}:") for cid in case_ids)
     ]
-    focus = choose_focus(profile.belief, profile.costs, candidates=candidates)
+    focus = choose_focus(
+        profile.belief, profile.costs, candidates=candidates, kappa=profile.planning_kappa
+    )
     overrides: dict[str, float] = {}
     if focus:
         overrides, why = FOCUS_DIALS.get(focus, ({}, "reveal the relevant fact when asked"))

@@ -96,12 +96,26 @@ and credit estimates to the LLM. Template feedback uses the same observations. N
 feedback refuses active sessions and skips custom-term sessions. `SessionStore` saves
 transcripts and debrief artifacts; the profile feeds saved personal credit back to UCB.
 
-## Remaining evaluation integration
+## Evaluation and budget
 
-The API gateway remains `negotrain.llm`; offline tests inject `ScriptedLLM` and never
-spend API money. A persistent spend reservation/ledger and the sim3 experiment runner
-are still required. Evaluation must report ML-Q1 steering, ML-Q2 calibration/recovery,
-ML-Q3 five-session policy comparisons, both true-state error-cost reduction and held-out
-no-focus competence gain, and uncertainty over independently sampled users. Human
-transfer, human-like concession curves, and teammate tagging agreement require human
-data and must not be asserted from simulations.
+The API gateway remains `negotrain.llm`; offline tests inject `ScriptedLLM`.
+`budget.py` reserves a conservative full-context/output cost in a shared SQLite ledger
+before each request. Successful usage settles the charge; uncertain failures retain the
+reserve. SDK retries and automatic model fallback are disabled. The persistent cap is
+$150 across processes and restarts. The ledger and all credentials stay out of git.
+
+`scripts/evaluate.py` runs independent calibration, development, and test populations.
+Exact Binomial-oracle results test the mathematical model; grounded transcript results
+measure realized detector rates and held-out no-focus competence G. These are separate
+experiments: policy propensities are not asserted to equal conditional error rates.
+LLM personas receive role-projected case materials, pre-session focus callouts, and prior
+post-session feedback; their states are not manually improved by the synthetic Learn map.
+Independent users may run concurrently; per-turn checkpoints make interrupted episodes
+resumable, and user-level paired bootstrap intervals preserve sampling dependence.
+
+`results/calibration/` holds population costs and tuned lambda/kappa, matched by full case
+hash and role before the app loads them. Calibration from another upload is never reused.
+Before calibration, the app retains explicitly uncalibrated unit priors. Private raw
+transcripts stay in ignored `results/**/raw/`; public outputs contain numeric metrics only.
+Human transfer, human-like concession curves, and teammate tagging agreement require human
+data and must not be asserted from simulations. See the sim3 results for measured limits.

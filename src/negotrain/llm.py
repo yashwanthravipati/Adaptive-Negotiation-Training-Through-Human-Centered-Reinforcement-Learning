@@ -30,11 +30,6 @@ from negotrain.budget import SpendLedger
 T = TypeVar("T", bound=BaseModel)
 Message = dict[str, Any]  # {"role": "user" | "assistant", "content": str}
 
-# Server-side fallback: if a safety classifier declines, the API retries on the model
-# Anthropic recommends for that refusal category instead of returning the refusal.
-_FALLBACK_BETA = "server-side-fallback-2026-07-01"
-
-
 class LLMRefusal(RuntimeError):
     pass
 
@@ -134,8 +129,7 @@ class ClaudeLLM:
             "output_config": {"effort": self.effort},
             # The system prompt (case + role sheet) is identical across turns of a session.
             "cache_control": {"type": "ephemeral"},
-            "betas": [_FALLBACK_BETA],
-            "fallbacks": [],  # every model request must have its own reservation
+            # Fallback is opt-in: omit it so every model request has its own reserve.
         }
 
     def _check(self, response: Any, reservation: str) -> None:

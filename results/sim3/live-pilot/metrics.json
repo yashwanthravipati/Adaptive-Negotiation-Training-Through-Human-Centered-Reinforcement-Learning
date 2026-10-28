@@ -1,0 +1,122 @@
+{
+  "R": 0.4318181818181818,
+  "agreement": true,
+  "counterpart_points": [
+    515.0,
+    505.0,
+    490.0
+  ],
+  "counts": {
+    "error:1": {
+      "o": 1,
+      "x": 0
+    },
+    "error:2": {
+      "o": 0,
+      "x": 0
+    },
+    "error:3": {
+      "o": 1,
+      "x": 0
+    },
+    "error:4": {
+      "o": 1,
+      "x": 0
+    },
+    "error:5": {
+      "o": 6,
+      "x": 0
+    },
+    "error:6": {
+      "o": 2,
+      "x": 0
+    },
+    "fact:sim3_inferred:officer:alternative": {
+      "o": 3,
+      "x": 0
+    },
+    "fact:sim3_inferred:officer:other_priority:claims": {
+      "o": 3,
+      "x": 1
+    },
+    "fact:sim3_inferred:officer:other_priority:records": {
+      "o": 3,
+      "x": 0
+    },
+    "fact:sim3_inferred:officer:other_priority:registration": {
+      "o": 3,
+      "x": 0
+    },
+    "fact:sim3_inferred:officer:other_priority:staffing": {
+      "o": 3,
+      "x": 1
+    },
+    "fact:sim3_inferred:officer:other_priority:timeline": {
+      "o": 3,
+      "x": 0
+    },
+    "fact:sim3_inferred:officer:other_priority:welfare": {
+      "o": 3,
+      "x": 0
+    },
+    "fact:sim3_inferred:officer:own_priority:claims": {
+      "o": 3,
+      "x": 0
+    },
+    "fact:sim3_inferred:officer:own_priority:records": {
+      "o": 3,
+      "x": 0
+    },
+    "fact:sim3_inferred:officer:own_priority:registration": {
+      "o": 3,
+      "x": 2
+    },
+    "fact:sim3_inferred:officer:own_priority:staffing": {
+      "o": 3,
+      "x": 1
+    },
+    "fact:sim3_inferred:officer:own_priority:timeline": {
+      "o": 3,
+      "x": 1
+    },
+    "fact:sim3_inferred:officer:own_priority:welfare": {
+      "o": 3,
+      "x": 1
+    },
+    "fact:sim3_inferred:officer:tradeable:claims": {
+      "o": 3,
+      "x": 0
+    },
+    "fact:sim3_inferred:officer:tradeable:records": {
+      "o": 3,
+      "x": 0
+    },
+    "fact:sim3_inferred:officer:tradeable:registration": {
+      "o": 3,
+      "x": 0
+    },
+    "fact:sim3_inferred:officer:tradeable:staffing": {
+      "o": 3,
+      "x": 0
+    },
+    "fact:sim3_inferred:officer:tradeable:timeline": {
+      "o": 3,
+      "x": 0
+    },
+    "fact:sim3_inferred:officer:tradeable:welfare": {
+      "o": 3,
+      "x": 0
+    },
+    "fact:sim3_inferred:officer:walkaway": {
+      "o": 3,
+      "x": 3
+    },
+    "rapport": {
+      "o": 3,
+      "x": 3
+    }
+  },
+  "hook_applied": 0,
+  "hook_attempts": 0,
+  "user_turns": 3
+}

@@ -1,0 +1,38 @@
+{
+  "M": 4,
+  "credit_occurrences": {
+    "error:1": 48,
+    "error:2": 23,
+    "error:3": 36,
+    "error:4": 82,
+    "error:5": 192,
+    "error:6": 113,
+    "fact:sim3_inferred:officer:alternative": 311,
+    "fact:sim3_inferred:officer:other_priority:claims": 419,
+    "fact:sim3_inferred:officer:other_priority:records": 418,
+    "fact:sim3_inferred:officer:other_priority:registration": 421,
+    "fact:sim3_inferred:officer:other_priority:staffing": 427,
+    "fact:sim3_inferred:officer:other_priority:timeline": 406,
+    "fact:sim3_inferred:officer:other_priority:welfare": 425,
+    "fact:sim3_inferred:officer:own_priority:claims": 420,
+    "fact:sim3_inferred:officer:own_priority:records": 412,
+    "fact:sim3_inferred:officer:own_priority:registration": 413,
+    "fact:sim3_inferred:officer:own_priority:staffing": 402,
+    "fact:sim3_inferred:officer:own_priority:timeline": 424,
+    "fact:sim3_inferred:officer:own_priority:welfare": 420,
+    "fact:sim3_inferred:officer:tradeable:claims": 426,
+    "fact:sim3_inferred:officer:tradeable:records": 411,
+    "fact:sim3_inferred:officer:tradeable:registration": 424,
+    "fact:sim3_inferred:officer:tradeable:staffing": 412,
+    "fact:sim3_inferred:officer:tradeable:timeline": 424,
+    "fact:sim3_inferred:officer:tradeable:welfare": 434,
+    "fact:sim3_inferred:officer:walkaway": 0,
+    "rapport": 103
+  },
+  "critical_turn_cap": 3,
+  "missing_costs": [
+    "fact:sim3_inferred:officer:walkaway"
+  ],
+  "population": "independent calibration users",
+  "users": 8
+}

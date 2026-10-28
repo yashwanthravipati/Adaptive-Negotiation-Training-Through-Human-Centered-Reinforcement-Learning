@@ -1,0 +1,386 @@
+{
+  "focus_effects": {
+    "error:1": {
+      "hook_application_rate": 0.0,
+      "mean_focused_opportunities": 1.46875,
+      "opportunity_difference": {
+        "ci95": [
+          -0.15625,
+          0.0625
+        ],
+        "mean": -0.03125,
+        "n": 32
+      }
+    },
+    "error:2": {
+      "hook_application_rate": 0.0,
+      "mean_focused_opportunities": 1.125,
+      "opportunity_difference": {
+        "ci95": [
+          -0.0625,
+          0.21875
+        ],
+        "mean": 0.0625,
+        "n": 32
+      }
+    },
+    "error:3": {
+      "hook_application_rate": 0.0,
+      "mean_focused_opportunities": 0.59375,
+      "opportunity_difference": {
+        "ci95": [
+          -0.125,
+          0.34375
+        ],
+        "mean": 0.09375,
+        "n": 32
+      }
+    },
+    "error:4": {
+      "hook_application_rate": 1.0,
+      "mean_focused_opportunities": 0.8125,
+      "opportunity_difference": {
+        "ci95": [
+          0.03125,
+          0.34375
+        ],
+        "mean": 0.1875,
+        "n": 32
+      }
+    },
+    "error:5": {
+      "hook_application_rate": 1.0,
+      "mean_focused_opportunities": 6.0,
+      "opportunity_difference": {
+        "ci95": [
+          0.0,
+          0.0
+        ],
+        "mean": 0.0,
+        "n": 32
+      }
+    },
+    "error:6": {
+      "hook_application_rate": 1.0,
+      "mean_focused_opportunities": 3.96875,
+      "opportunity_difference": {
+        "ci95": [
+          -3.78125,
+          -0.875
+        ],
+        "mean": -2.15625,
+        "n": 32
+      }
+    },
+    "fact:sim3_inferred:officer:alternative": {
+      "hook_application_rate": 0.0,
+      "mean_focused_opportunities": 6.75,
+      "opportunity_difference": {
+        "ci95": [
+          0.0,
+          0.0
+        ],
+        "mean": 0.0,
+        "n": 32
+      }
+    },
+    "fact:sim3_inferred:officer:other_priority:claims": {
+      "hook_application_rate": 0.0,
+      "mean_focused_opportunities": 6.75,
+      "opportunity_difference": {
+        "ci95": [
+          0.0,
+          0.0
+        ],
+        "mean": 0.0,
+        "n": 32
+      }
+    },
+    "fact:sim3_inferred:officer:other_priority:records": {
+      "hook_application_rate": 0.0,
+      "mean_focused_opportunities": 6.75,
+      "opportunity_difference": {
+        "ci95": [
+          0.0,
+          0.0
+        ],
+        "mean": 0.0,
+        "n": 32
+      }
+    },
+    "fact:sim3_inferred:officer:other_priority:registration": {
+      "hook_application_rate": 0.0,
+      "mean_focused_opportunities": 6.75,
+      "opportunity_difference": {
+        "ci95": [
+          0.0,
+          0.0
+        ],
+        "mean": 0.0,
+        "n": 32
+      }
+    },
+    "fact:sim3_inferred:officer:other_priority:staffing": {
+      "hook_application_rate": 0.0,
+      "mean_focused_opportunities": 6.75,
+      "opportunity_difference": {
+        "ci95": [
+          0.0,
+          0.0
+        ],
+        "mean": 0.0,
+        "n": 32
+      }
+    },
+    "fact:sim3_inferred:officer:other_priority:timeline": {
+      "hook_application_rate": 0.0,
+      "mean_focused_opportunities": 6.75,
+      "opportunity_difference": {
+        "ci95": [
+          0.0,
+          0.0
+        ],
+        "mean": 0.0,
+        "n": 32
+      }
+    },
+    "fact:sim3_inferred:officer:other_priority:welfare": {
+      "hook_application_rate": 0.0,
+      "mean_focused_opportunities": 6.75,
+      "opportunity_difference": {
+        "ci95": [
+          0.0,
+          0.0
+        ],
+        "mean": 0.0,
+        "n": 32
+      }
+    },
+    "fact:sim3_inferred:officer:own_priority:claims": {
+      "hook_application_rate": 0.0,
+      "mean_focused_opportunities": 6.75,
+      "opportunity_difference": {
+        "ci95": [
+          0.0,
+          0.0
+        ],
+        "mean": 0.0,
+        "n": 32
+      }
+    },
+    "fact:sim3_inferred:officer:own_priority:records": {
+      "hook_application_rate": 0.0,
+      "mean_focused_opportunities": 6.75,
+      "opportunity_difference": {
+        "ci95": [
+          0.0,
+          0.0
+        ],
+        "mean": 0.0,
+        "n": 32
+      }
+    },
+    "fact:sim3_inferred:officer:own_priority:registration": {
+      "hook_application_rate": 0.0,
+      "mean_focused_opportunities": 6.75,
+      "opportunity_difference": {
+        "ci95": [
+          0.0,
+          0.0
+        ],
+        "mean": 0.0,
+        "n": 32
+      }
+    },
+    "fact:sim3_inferred:officer:own_priority:staffing": {
+      "hook_application_rate": 0.0,
+      "mean_focused_opportunities": 6.75,
+      "opportunity_difference": {
+        "ci95": [
+          0.0,
+          0.0
+        ],
+        "mean": 0.0,
+        "n": 32
+      }
+    },
+    "fact:sim3_inferred:officer:own_priority:timeline": {
+      "hook_application_rate": 0.0,
+      "mean_focused_opportunities": 6.75,
+      "opportunity_difference": {
+        "ci95": [
+          0.0,
+          0.0
+        ],
+        "mean": 0.0,
+        "n": 32
+      }
+    },
+    "fact:sim3_inferred:officer:own_priority:welfare": {
+      "hook_application_rate": 0.0,
+      "mean_focused_opportunities": 6.75,
+      "opportunity_difference": {
+        "ci95": [
+          0.0,
+          0.0
+        ],
+        "mean": 0.0,
+        "n": 32
+      }
+    },
+    "fact:sim3_inferred:officer:tradeable:claims": {
+      "hook_application_rate": 0.0,
+      "mean_focused_opportunities": 6.75,
+      "opportunity_difference": {
+        "ci95": [
+          0.0,
+          0.0
+        ],
+        "mean": 0.0,
+        "n": 32
+      }
+    },
+    "fact:sim3_inferred:officer:tradeable:records": {
+      "hook_application_rate": 0.0,
+      "mean_focused_opportunities": 6.75,
+      "opportunity_difference": {
+        "ci95": [
+          0.0,
+          0.0
+        ],
+        "mean": 0.0,
+        "n": 32
+      }
+    },
+    "fact:sim3_inferred:officer:tradeable:registration": {
+      "hook_application_rate": 0.0,
+      "mean_focused_opportunities": 6.75,
+      "opportunity_difference": {
+        "ci95": [
+          0.0,
+          0.0
+        ],
+        "mean": 0.0,
+        "n": 32
+      }
+    },
+    "fact:sim3_inferred:officer:tradeable:staffing": {
+      "hook_application_rate": 0.0,
+      "mean_focused_opportunities": 6.75,
+      "opportunity_difference": {
+        "ci95": [
+          0.0,
+          0.0
+        ],
+        "mean": 0.0,
+        "n": 32
+      }
+    },
+    "fact:sim3_inferred:officer:tradeable:timeline": {
+      "hook_application_rate": 0.0,
+      "mean_focused_opportunities": 6.75,
+      "opportunity_difference": {
+        "ci95": [
+          0.0,
+          0.0
+        ],
+        "mean": 0.0,
+        "n": 32
+      }
+    },
+    "fact:sim3_inferred:officer:tradeable:welfare": {
+      "hook_application_rate": 0.0,
+      "mean_focused_opportunities": 6.75,
+      "opportunity_difference": {
+        "ci95": [
+          0.0,
+          0.0
+        ],
+        "mean": 0.0,
+        "n": 32
+      }
+    },
+    "fact:sim3_inferred:officer:walkaway": {
+      "hook_application_rate": 0.0,
+      "mean_focused_opportunities": 6.75,
+      "opportunity_difference": {
+        "ci95": [
+          0.0,
+          0.0
+        ],
+        "mean": 0.0,
+        "n": 32
+      }
+    },
+    "rapport": {
+      "hook_application_rate": 0.0,
+      "mean_focused_opportunities": 6.03125,
+      "opportunity_difference": {
+        "ci95": [
+          -1.625,
+          0.03125
+        ],
+        "mean": -0.71875,
+        "n": 32
+      }
+    }
+  },
+  "tier_R_spearman": -0.9999999999999999,
+  "tiers": {
+    "1": {
+      "R": {
+        "ci95": [
+          0.4779829545454546,
+          0.6377840909090909
+        ],
+        "mean": 0.5589488636363636,
+        "n": 32
+      },
+      "agreement_rate": 1.0
+    },
+    "2": {
+      "R": {
+        "ci95": [
+          0.42539062499999997,
+          0.5759943181818181
+        ],
+        "mean": 0.5014204545454546,
+        "n": 32
+      },
+      "agreement_rate": 1.0
+    },
+    "3": {
+      "R": {
+        "ci95": [
+          0.3280894886363636,
+          0.5028586647727272
+        ],
+        "mean": 0.4147727272727273,
+        "n": 32
+      },
+      "agreement_rate": 1.0
+    },
+    "4": {
+      "R": {
+        "ci95": [
+          0.21164772727272727,
+          0.3352450284090908
+        ],
+        "mean": 0.2663352272727273,
+        "n": 32
+      },
+      "agreement_rate": 1.0
+    },
+    "5": {
+      "R": {
+        "ci95": [
+          0.18323863636363638,
+          0.27842684659090905
+        ],
+        "mean": 0.2244318181818182,
+        "n": 32
+      },
+      "agreement_rate": 1.0
+    }
+  }
+}

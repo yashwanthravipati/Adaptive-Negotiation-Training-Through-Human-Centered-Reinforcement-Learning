@@ -104,3 +104,50 @@ def test_episode_checkpoint_reuses_complete_work_and_resumes_rng(case, tmp_path)
 def test_uncertainty_resamples_users_and_preserves_negative_outcomes():
     result = interval([-0.25] * 8)
     assert result == {"n": 8, "mean": -0.25, "ci95": [-0.25, -0.25]}
+
+
+def test_parallel_users_produce_same_paired_results(case, tmp_path, monkeypatch):
+    import negotrain.evaluation as evaluation
+
+    monkeypatch.setattr(evaluation, "TRAINING_TIERS", (2,))
+    monkeypatch.setattr(evaluation, "PROBE_TIERS", (3,))
+    monkeypatch.setattr(evaluation, "POLICIES", ("ucb", "none"))
+    tuning = {"selected": {"forgetting": 0.8, "kappa": 1}}
+    summaries = []
+    for workers in (1, 2):
+        root = tmp_path / str(workers)
+        exp = Experiment(case, "candidate", root, {"seed": 11})
+        summaries.append(evaluation.grounded_training(exp, CostModel(), tuning, 2, 11, workers))
+    assert summaries[0] == summaries[1]
+    assert (tmp_path / "1" / "training_rows.json").read_text() == (
+        tmp_path / "2" / "training_rows.json"
+    ).read_text()
+
+
+def test_calibration_matches_exact_case_and_initializes_fact_beliefs(case, tmp_path):
+    import hashlib
+
+    from negotrain.profiling.observations import case_facts
+    from negotrain.profiling.profile import CaseCalibration, build_profile, load_calibration
+
+    calibration = CaseCalibration(
+        case_sha256=hashlib.sha256(case.model_dump_json().encode()).hexdigest(),
+        role="candidate",
+        costs=CostModel(population={"error:1": 0.2}),
+        forgetting=0.5,
+        kappa=0,
+        source="independent calibration",
+    )
+    (tmp_path / "calibration.json").write_text(calibration.model_dump_json())
+    loaded = load_calibration(case, "candidate", tmp_path)
+    profile = build_profile("a", [], context=(case, "candidate"), calibration=loaded)
+    assert profile.belief.forgetting == 0.5
+    assert profile.planning_kappa == 0
+    assert profile.costs.weight("error:1") == 0.2
+    assert all(f.id in profile.belief.components for f in case_facts(case, "candidate"))
+    assert load_calibration(case, "recruiter", tmp_path) is None
+    altered = case.model_copy(deep=True)
+    altered.role("candidate").reservation_value += 1
+    assert load_calibration(altered, "candidate", tmp_path) is None
+    with pytest.raises(ValueError, match="does not match"):
+        build_profile("a", [], context=(altered, "candidate"), calibration=loaded)
