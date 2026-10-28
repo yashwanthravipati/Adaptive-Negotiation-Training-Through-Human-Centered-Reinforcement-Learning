@@ -28,3 +28,4 @@ Structure from the course guidelines; reuse docs/results/*.md.
 - 2026-10-28: Rephrased the performance definition to use "G as the average score" as requested.
 - 2026-10-28: Added iteration on the coach's system prompts as a possible next step for improving feedback clarity and usefulness.
 - 2026-10-28: Removed confidence-interval and bootstrap references from the short report's prose and table at the user's request; mean gains and the underlying detailed evaluation artifacts are unchanged.
+- 2026-10-28: Reworded the policy comparison to explicitly describe differences in mean G gain, using the user's requested phrasing.
