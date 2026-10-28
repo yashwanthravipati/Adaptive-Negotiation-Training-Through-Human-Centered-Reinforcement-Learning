@@ -12,23 +12,30 @@ import random
 
 from pydantic import BaseModel, Field
 
-from negotrain.counterpart.profiles import sample_profile
+from negotrain.counterpart.profiles import FOCUS_DIALS, sample_profile
 from negotrain.profiling import NegotiatorProfile, extract_features
 from negotrain.profiling.belief import choose_focus
 from negotrain.schemas import Case, CounterpartProfile, Session
 
 START_TIER = 2
 
-# Fixed labels act through dials, behavior hooks, prep, and feedback order.
-FOCUS_DIALS: dict[str, tuple[dict[str, float], str]] = {
-    "error:1": ({}, "hold until you concede or six turns pass"),
-    "error:2": ({}, "sometimes withhold reciprocal concessions"),
-    "error:3": ({"anchoring": 1.0}, "open at its most extreme package"),
-    "error:4": ({}, "hold an early low-surplus offer for two turns"),
-    "error:5": ({}, "leave an issue for you to raise"),
-    "error:6": ({}, "put two packages on the table early"),
-    "rapport": ({}, "respond to constructive engagement with a faster concession"),
+FOCUS_PREP = {
+    "error:1": "Before conceding, look for movement from the other side.",
+    "error:2": "Track what you received for your last concession before making another.",
+    "error:3": "Choose an opening from your priorities before seeing their opening number.",
+    "error:4": "Compare any agreement with your walk-away and your achievable target.",
+    "error:5": "Raise every issue you value and explore different options on it.",
+    "error:6": "Compare new packages with previous ones; avoid making both sides worse off.",
+    "rapport": "Acknowledge their concerns and ask constructive questions about interests.",
 }
+
+
+def focus_callout(focus: str | None) -> str:
+    if focus is None:
+        return "Use your preparation to negotiate without a targeted practice focus."
+    return FOCUS_PREP.get(
+        focus, "Identify the relevant case fact and plan how to use or ask about it."
+    )
 
 
 class ScenarioSpec(BaseModel):

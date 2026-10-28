@@ -17,7 +17,6 @@ from negotrain.cases.documents import UPLOAD_TYPES, extract_documents
 from negotrain.feedback import Debrief
 from negotrain.llm import LLMRefusal
 from negotrain.prep import Prep, prep_key
-from negotrain.profiling import build_profile
 from negotrain.schemas import Case, Session, SourceDocument
 from negotrain.sessions import SessionStore
 
@@ -197,7 +196,7 @@ def render(page: str) -> None:
             prep=prep,
             session=session,
             debrief=debrief,
-            profile=build_profile(pid, views.history(pid)).model_dump()
+            profile=views.current_profile(pid, views.history(pid)).model_dump()
             if page == "My profile"
             else None,
         )

@@ -99,9 +99,10 @@ tests/              pytest; `case` fixture loads data/cases/cloudline_hiring.jso
 
 ## Product and research guardrails (do not violate without the user's say-so)
 
-- **Automatic coaching remains post-session** (decision 0002). The user-requested personal
-  assistant answers explicit questions, including hypotheticals, during rehearsal
-  (decision 0007). It never sends a move to the counterpart or uses an unrevealed sheet.
+- **Coaching remains post-session** (decision 0002 and new-spec.md). The active-rehearsal
+  assistant clarifies facts only; no move suggestions or hypothetical move coaching.
+  The newer user-requested specification supersedes decision 0007's live exception.
+  It never sends a move to the counterpart or uses an unrevealed sheet.
 - **Information hiding:** the counterpart never sees the user's confidential sheet, and the
   user never sees the counterpart's sheet before the debrief. Test this when you touch
   prompts or the UI.

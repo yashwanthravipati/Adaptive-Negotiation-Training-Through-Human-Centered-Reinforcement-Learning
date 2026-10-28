@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from negotrain.cases.offers import closest_offer
+from negotrain.cases.offers import closest_offer, feasible_best_points, listed_packages
 from negotrain.cases.scoring import score_offer
 from negotrain.counterpart.aspiration import aspiration
 from negotrain.schemas import Case, CounterpartProfile, Session, Turn
@@ -64,8 +64,56 @@ class RuleBasedCounterpart:
             issue_id: max(table.values()) - min(table.values())
             for issue_id, table in self.role.points.items()
         }
+        if self.profile.focus == "error:5":
+            spread.pop(self.ignored_issue(), None)
+        if not spread:
+            return " What matters most to you?"
         top = max(spread, key=spread.get)
         return f" For us, {self.case.issue(top).name.lower()} matters most."
+
+    def ignored_issue(self) -> str:
+        return (
+            self.profile.focus_issue
+            or min(
+                self.case.issues,
+                key=lambda i: (
+                    max(self.role.points[i.id].values()) - min(self.role.points[i.id].values())
+                ),
+            ).id
+        )
+
+    def _hook_offer(self, session: Session, minimum: float):
+        """Hooks shape only available, schedule-feasible formal packages."""
+        focus = self.profile.focus
+        n = sum(t.speaker == "counterpart" for t in session.turns)
+        previous = session.latest_offer_from("counterpart")
+        if focus == "error:4" and n in (1, 2) and previous:
+            return previous
+        if not (
+            (focus == "error:4" and n == 0) or focus == "error:5" or (focus == "error:6" and n == 1)
+        ):
+            return None
+        eligible = [
+            (d, own, other)
+            for d, own, other in listed_packages(self.case, self.role.id)
+            if own >= minimum
+        ]
+        if focus == "error:4":
+            me = session.user_role_id
+            rv = self.case.role(me).reservation_value
+            upper = rv + 0.25 * (feasible_best_points(self.case, me) - rv)
+            eligible = [(d, own, u) for d, own, u in eligible if rv <= u < upper]
+        elif focus == "error:5":
+            issue = self.ignored_issue()
+            worst = min(self.role.points[issue], key=self.role.points[issue].get)
+            eligible = [(d, own, u) for d, own, u in eligible if d.terms[issue] == worst]
+        else:
+            eligible = [(d, own, u) for d, own, u in eligible if d != previous]
+        return (
+            min(eligible, key=lambda item: (item[1], tuple(item[0].terms.values())))[0]
+            if eligible
+            else None
+        )
 
     def respond(self, session: Session) -> Turn:
         index = len(session.turns)
@@ -78,7 +126,8 @@ class RuleBasedCounterpart:
                 return Turn(index=index, speaker="counterpart", text=_ACCEPT, accept=True)
 
         tone = _tone(self.profile)
-        offer = closest_offer(self.case, self.role.id, minimum, theirs)
+        hook_offer = self._hook_offer(session, minimum)
+        offer = hook_offer or closest_offer(self.case, self.role.id, minimum, theirs)
         if offer is None:
             return Turn(
                 index=index,
@@ -99,8 +148,22 @@ class RuleBasedCounterpart:
                 "Here is a proposal using those options."
             )
         if last and last.speaker == "user" and "?" in last.text:
-            if self.profile.disclosure >= 0.5:
+            if self.profile.disclosure >= 0.5 or (
+                self.profile.focus and self.profile.focus.startswith("fact:")
+            ):
                 text += self._priority_hint()
             else:
                 text += " I'd rather focus on the terms themselves."
-        return Turn(index=index, speaker="counterpart", text=text, offer=offer)
+        n = sum(t.speaker == "counterpart" for t in session.turns)
+        active_hook = (
+            self.profile.focus == "error:5"
+            or (self.profile.focus == "error:4" and n <= 2)
+            or (self.profile.focus == "error:6" and n == 1)
+        )
+        return Turn(
+            index=index,
+            speaker="counterpart",
+            text=text,
+            offer=offer,
+            hook_applied=(hook_offer is not None) if active_hook else None,
+        )

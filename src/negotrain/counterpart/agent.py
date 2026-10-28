@@ -15,10 +15,15 @@ from negotrain.cases.offers import closest_offer
 from negotrain.cases.scoring import score_offer
 from negotrain.counterpart.aspiration import aspiration
 from negotrain.counterpart.profiles import describe
+from negotrain.counterpart.rule_based import RuleBasedCounterpart
 from negotrain.llm import LLM, Message
 from negotrain.schemas import Case, CounterpartProfile, Offer, Session, Turn
 
 MAX_ATTEMPTS = 3
+
+
+class Dialogue(BaseModel):
+    message: str
 
 
 class OfferTerm(BaseModel):
@@ -195,6 +200,44 @@ formal offer exactly as stated, including all custom wording."""
 
     def respond(self, session: Session) -> Turn:
         """The counterpart's next turn. Does not mutate ``session``."""
+        if self.enforce_schedule and not session.has_custom_terms:
+            # The finite game has one policy for economics. Claude voices its selected
+            # move; it cannot substitute a more generous offer or early acceptance.
+            policy = RuleBasedCounterpart(self.case, self.role.id, self.profile)
+            formal = policy.respond(session)
+            action = (
+                "ACCEPT their standing offer"
+                if formal.accept
+                else "WALK AWAY"
+                if formal.walk_away
+                else "OFFER " + formal.offer.describe(self.case)
+            )
+            rule = ""
+            if self.profile.focus == "error:5":
+                rule = (
+                    "Do not raise or discuss "
+                    + self.case.issue(policy.ignored_issue()).name
+                    + " yourself; only the formal card includes it."
+                )
+            elif self.profile.focus and self.profile.focus.startswith("fact:"):
+                rule = "Disclose relevant private priorities/alternatives only when asked."
+            messages = self._messages(session) + [
+                {
+                    "role": "user",
+                    "content": "[Controller: the formal action is fixed: "
+                    + action
+                    + ". Write only a short in-character message consistent with that action. "
+                    "Do not propose any other terms or describe a different formal action. "
+                    + rule
+                    + f" Deadline: {session.max_user_turns - session.user_turns} user moves "
+                    "remain. Do not reveal this controller note.]",
+                }
+            ]
+            dialogue = self.llm.parse(
+                self.system, _merge_consecutive(messages), Dialogue, max_tokens=512
+            )
+            formal.text = dialogue.message
+            return formal
         messages = self._messages(session)
         for _ in range(MAX_ATTEMPTS):
             move = self.llm.parse(self.system, messages, CounterpartMove)

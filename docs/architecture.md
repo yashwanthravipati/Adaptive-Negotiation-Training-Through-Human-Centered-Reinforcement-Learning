@@ -1,185 +1,107 @@
 # Architecture
 
-## Data flow
+The app reuses the upload → prepare → rehearse → feedback → profile → real-outcome flow.
+The formal model is specified in `new-spec.md` and `report.tex`; decision 0008 records
+where they differ and the chosen interpretation.
 
-1. **Case.** A negotiation case (`schemas.Case`) has issues with options, and per-role
-   confidential sheets (`RoleSheet`) with point tables, a reservation value (BATNA), and
-   optional hard constraints. Cases come from hand-written JSON or from the LLM parser
-   (`cases/parser.py`, T-004), always followed by human review.
-2. **Session setup.** The curriculum (`curriculum/`, T-027) picks a case, a role, and a
-   `CounterpartProfile` (tier plus dials). `counterpart.sample_profile` jitters the tier's
-   preset (domain randomization).
-3. **Negotiation.** The UI (`app/`, T-014) or the CLI (`cli.py`) appends `Turn`s to a
-   `Session`. Each turn has free text plus an optional structured `Offer`
-   (`terms`: issue → listed option; `custom_terms`: issue → free text), `accept`, or
-   `walk_away`. `Session.add_turn` enforces turn order and
-   the agreement rules: you can only accept the other side's latest *complete* offer.
-4. **Counterpart.** `CounterpartAgent.respond(session)` builds a system prompt from the
-   public brief, its own role sheet, and behavior instructions (`profiles.describe`); it
-   replays the transcript and asks the LLM for a structured `CounterpartMove`. Code-level
-   guards reject invalid ids and known hard-constraint violations. For fully listed
-   offers, they also reject deals below the reservation value or (T-011) the current
-   aspiration level (`counterpart/aspiration.py`), and ask the model again; a
-   private per-turn note tells the model its current minimum. After three invalid
-   attempts, code makes a counteroffer at the minimum (`agent.fallbacks` counts these).
-   Custom terms are evaluated qualitatively against the counterpart's own role; they
-   have no point score and no numeric reservation/aspiration guarantee. The counterpart
-   can propose or accept custom wording without mapping it to a listed option.
-   `RuleBasedCounterpart` follows the same schedule with canned dialogue: it is the
-   offline-mode opponent and the cheap finisher for rollouts.
-5. **Storage.** `SessionStore` writes `data/sessions/<id>.json` after every turn;
-   per-session artifacts (the feedback `Debrief`) go to `data/sessions/<kind>/<id>.json`;
-   onboarding records (`Participant`) to `data/participants/`.
-6. **Afterwards.** `feedback/` reads a finished session: `critical_turns` picks up to 3
-   user decisions (first offer, concessions, accept, walk-away); `alternatives` builds
-   concrete alternative moves in code; `analyze_session` replays each from a fork N times
-   (LLM counterpart for `horizon` turns, then the rule-based finisher) against a
-   `simulation.ScriptedUser` that concedes at this user's observed pace; `build_report`
-   turns the numbers into a coaching report (LLM, with a template fallback).
-   Sessions containing custom terms skip numeric simulations and concession features;
-   the coach still receives the full transcript. Custom agreements have null points,
-   surplus, and efficiency rather than fabricated scores.
-   `profiling/` turns sessions into features, error flags, and skill scores shrunk toward
-   0.5; `curriculum.next_scenario` uses them to pick the next tier and dial emphasis.
-7. **Real negotiations** are logged as `Session(kind="real")` with the agreement and the
-   participant's ratings of the other side (`observed_counterpart`), so the same feature
-   code and the rehearsal-vs-real comparison work on them.
+## Case, visibility, and reward
 
-## Modules
+`schemas.Case` contains public issues/options, two private role sheets, and optionally
+role-projected source documents. `cases/parser.py` reads PDF, Word, text, and ZIP uploads;
+missing counterpart sheets are labeled inferred. Private uploads, originals, transcripts,
+and participant records stay in gitignored directories. `data/cases/sim3/` is likewise
+ignored because it contains the supplied class materials.
 
-| Module | Responsibility | Workstream | Status |
-|---|---|---|---|
-| `schemas.py` | Shared data models; the contract between modules | all | v1 |
-| `llm.py` | `LLM` protocol, `ClaudeLLM`, `ScriptedLLM`, `LLMRefusal`, `Usage` | infra | v1 |
-| `config.py` | Env-driven settings (`NEGOTRAIN_MODEL`, `NEGOTRAIN_EFFORT`, `NEGOTRAIN_SESSIONS_DIR`) | infra | v1 |
-| `cases/__init__.py` | `load_case` | cases | v1 |
-| `cases/scoring.py` | `score_offer`, `joint_points`, `max_joint_offer`, `efficiency` | cases | v1 |
-| `cases/parser.py` | Raw case text or a set of files (`parse_documents`) → `Case`; infers a missing sheet | cases | MVP (T-004) |
-| `cases/documents.py` | Text from uploaded PDF / Word / text files and ZIP bundles; per-file warnings | cases | MVP (T-045) |
-| `prep.py` | Prep brief: `prep_numbers` (code), `build_prep` (LLM + template); own sheet only | app | MVP (T-045) |
-| `assistant.py` | Explicit visible context, source excerpt retrieval, role-scoped chat models, one LLM reply | app | MVP (T-014) |
-| `app/assistant_panel.py` | Persistent right-hand assistant fragment, attachments, retry and clear-chat UI | app | MVP (T-014) |
-| `cases/offers.py` | Offer search: `closest_offer`, `best_joint_offer`, `claim`, `surplus_share` | cases | MVP |
-| `counterpart/profiles.py` | Tier presets, `sample_profile`, `describe` | counterpart | v1 (T-012) |
-| `counterpart/aspiration.py` | Concession schedule (`aspiration`) | counterpart | MVP (T-011) |
-| `counterpart/agent.py` | `CounterpartAgent`, `CounterpartMove` | counterpart | v1 + schedule (T-010, T-011) |
-| `counterpart/rule_based.py` | `RuleBasedCounterpart`, `Counterpart` protocol | counterpart | MVP |
-| `simulation.py` | `ScriptedUser`, `run_episode`, `episode_value` | counterpart | MVP (T-016) |
-| `feedback/` | `critical_turns`, `analyze_session`, `build_report`, `Debrief` | feedback | MVP (T-020, T-021, T-023) |
-| `profiling/` | `extract_features`, `flags`, `build_profile` | profiling | MVP (T-024, T-025) |
-| `curriculum/` | `next_scenario`, `counterpart_for` | counterpart | MVP (T-027) |
-| `sessions.py` | `SessionStore` (+ artifacts), `ParticipantStore` | infra | v1 |
-| `cli.py` | `negotrain show`, `negotrain play` | infra | v1 |
-| `app/` | Streamlit UI: Start, Prepare, Rehearse, Feedback, My profile, Real negotiation, Case library | app | MVP (T-014, T-028) |
+Scoring is deterministic. `cases/offers.feasible_best_points` computes the exact maximum
+user utility among packages satisfying the counterpart walk-away and hard constraints,
+using an additive Pareto frontier. `surplus_share` computes R without clipping negative
+values; a nonpositive denominator is explicitly unsupported. `simulation.episode_score`
+returns zero for no deal and null for an unscored custom agreement. Standing offers have
+no terminal value. Partial offers cannot establish numeric detector opportunities.
 
-## Counterpart dials
+The counterpart LLM sees public material, its own sheet, and visible dialogue. The prep
+and assistant see the user's own sheet and role-authorized sources. Both sheets may be
+used in post-session feedback; alternatives that use private information are labeled
+hindsight. During an active rehearsal the assistant is restricted to factual clarification;
+move suggestions and counterfactual coaching are available before/after rehearsal.
 
-All dials are in [0, 1]. `describe()` maps each one into low, mid, or high instructions.
+## Counterpart and session
 
-| Dial | Low | High |
-|---|---|---|
-| `anchoring` | opens near a fair split | opens near its best outcome |
-| `concession_rate` | rarely concedes, small steps | concedes readily |
-| `cooperativeness` | fixed-pie competitor | seeks cross-issue trades |
-| `aggression` | warm, polite | forceful, applies pressure |
-| `disclosure` | deflects questions about priorities | shares priorities openly |
-| `bluffing` | strictly truthful | exaggerates alternatives and priorities |
+`counterpart/profiles.py` defines five fixed tiers with independent opening, concession
+rate, and floor fractions of P_C_max-W_C. `aspiration.py` computes the current minimum
+from the transcript and seed, with extra deadline pressure. The session ends after at
+most 20 user moves and their counterpart responses, or earlier at acceptance/walk-away.
+The UI displays remaining user moves. Tier 5 recommendations require two strong tier-4
+sessions; participants may still explicitly select a tier.
 
-Tiers 1-5 are presets that run from transparent-cooperative to hardball (`profiles.TIERS`).
+`RuleBasedCounterpart` chooses formal actions in code. In the default hybrid path,
+`CounterpartAgent` uses the same formal policy and asks Claude only for the corresponding
+in-character text. Its model cannot replace an offer or acceptance. The prompt-only
+comparison and sessions involving custom terms retain qualitative LLM action generation,
+with validation/retries. Custom terms have no numeric score or schedule guarantee.
 
-## LLM usage conventions
+Focus labels act through the single `FOCUS_DIALS` table and explicit hooks: delayed first
+concession; seeded withholding of reciprocity; extreme opening; early low-surplus offer
+held for two turns; a fixed least-preferred issue option; two early packages; disclosure
+when asked; and a doubled concession step after rapport-tagged moves. A package hook
+that is incompatible with the economic constraints falls back to an ordinary feasible
+move and records `Turn.hook_applied=False`, rather than violating a walk-away value.
 
-- Make every call through an `LLM` instance passed in by the caller (dependency
-  injection), so tests can substitute `ScriptedLLM`.
-- Use `llm.parse(system, messages, PydanticModel)` for anything the code will read.
-  Prefer flat schemas: lists of small objects instead of free-form dicts.
-- Keep the system prompt stable within a session (the case and role sheet go first) so
-  prompt caching applies; put per-turn content in `messages`.
-- Opus 5.5 always thinks; control depth and spend with effort (`NEGOTRAIN_EFFORT`, or
-  `ClaudeLLM(effort=...)`). `temperature` is not accepted by the API.
-- Parallelize rollouts with `concurrent.futures.ThreadPoolExecutor`; the SDK client is
-  thread-safe.
-- `ClaudeLLM.usage` accumulates calls and tokens; log it with experiment results.
+Shared additive fields are `Turn.tags` (with annotation provenance), `Turn.hook_applied`,
+`Session.seed`, `Session.max_user_turns`, and counterpart `focus`, `focus_issue`, and
+`concession_floor`. Existing sessions load with defaults. Formal moves permit at most
+one offer/accept/walk-away, validated before transcript mutation.
 
-## Schema additions in the MVP (decision 0005)
+## Observations, belief, and planning
 
-- `RoleSheet.inferred`: the parser estimated this sheet (the user had only their own).
-- `Session.kind` (`rehearsal` | `real`), `Session.notes`, `Session.observed_counterpart`
-  (participant's 0-1 ratings of a real counterpart on the dials).
-- `Participant`: onboarding record (pseudonymous id, experience, goals, self-ratings,
-  consent).
+`profiling/observations.py` implements the six specified opportunity/occurrence detectors.
+Case-scoped fact rubrics use public issues and the user's own sheet, without exposing the
+other sheet. `profiling/tagging.py` sends a fixed rubric to the LLM and validates all tags
+before applying the batch. Missing tags are missing data; they do not count as failed
+rapport or awareness. An unvaried issue is counted as ignored only with complete message
+annotation. The app annotates a finished session before feedback, and annotates ongoing
+user text only when the rapport hook needs it. No coaching is generated by the tagger.
 
-All new fields have defaults, so existing session and case JSON still loads.
+`profiling/belief.py` maintains Beta distributions, discounting evidence once per session
+while preserving the prior by default. `discount_prior=True` provides report.tex's
+alternative recursion for sensitivity analysis. Exact credible intervals use SciPy.
+`profile.py` rebuilds beliefs from persisted transcripts and estimates personal error
+costs from fresh-batch counterfactual deltas, falling back to population costs. Before
+calibration, fallback cost/opportunity values are unit priors, not measured estimates.
 
-## Open-ended offers (decision 0006)
+The planner chooses maximum w*o_bar*(mean+kappa*sd), using 1-mean for facts and rapport.
+Greedy, seeded random, and no-focus alternatives use the same interface. The app displays
+probabilities, credible intervals, and opportunity counts, and includes a focus callout
+in preparation. The old six heuristic skill scores are removed. Behavioral summary
+features remain available for descriptive outcome and sim-to-real comparisons.
 
-- `Offer.custom_terms` defaults to `{}`; `terms` continues to hold listed option ids.
-  Each issue appears in at most one map. Either representation counts toward completion;
-  blank custom wording and unknown issue ids are rejected. Existing sessions still load.
-- `Offer.from_labels` preserves the builder's custom text, while exact listed labels
-  become option ids. Both the rehearsal and real-outcome forms accept new text.
-- `OfferTerm` in the counterpart response uses either `option_id` or `custom_text`.
-  Prompts and histories preserve custom wording for both speakers. Only the counterpart's
-  own confidential sheet enters its prompt.
-- `ScoreResult.points`/`surplus` and `OutcomeSummary.points`/`surplus` can be null.
-  `joint_points`, `efficiency`, and `claim` also return null for custom offers. Consumers
-  show "not scored" and exclude missing values from numeric skill estimates and comparisons.
-- `CounterfactualReport.skipped_reason` explains why numeric rollouts were not run.
-  Qualitative coaching remains available. The rule-based opponent cannot evaluate custom
-  terms and explicitly identifies its alternative as using listed options.
+## Counterfactual feedback
 
-## Personal assistant (decision 0007)
+`feedback/critical.py` identifies every formal user action and detector firing, then
+orders moments by the selected focus. Optional caps are explicit. `rollouts.py` restores
+the full prefix, setting, tags, deadline, and counterpart seed. The rollout user is a
+scripted policy with prefix-derived concession pace and seeded ±2.5% aspiration noise.
+It never fits its behavior on future transcript turns. Every rollout continues to an
+actual terminal outcome against the selected counterpart, without a substitute tail.
 
-The shared app shell renders the selected page and the assistant in adjacent columns.
-The assistant is sticky and independently scrollable on desktop; columns stack on narrow
-screens. Chat interactions run in a Streamlit fragment so an unsent rehearsal form stays
-intact. This implements the user's request for on-demand questions during every step,
-including rehearsal, as a scoped exception to decision 0002's automatic-feedback policy.
+One M-rollout batch (default M=4) selects a candidate, and a disjoint M-rollout batch
+scores the selected and actual actions. Common random numbers pair those fresh runs.
+Delta and its paired bootstrap interval use only the fresh scores; negative deltas are
+retained. Failed rollouts fail the estimate instead of silently biasing its sample.
+Small-M intervals are exploratory. Reports persist seeds, policy, reward units, hindsight
+labels, and actual outcomes. Older raw-point reports require regeneration before reuse.
 
-`assistant.context_sections` explicitly projects the public case, own role/points, matching
-prep, visible turns/offers, and matching feedback. It never serializes the full Case or
-Session. The other sheet is included only for the selected finished rehearsal on Rehearse
-or Feedback. Internal session notes, seeds, and unrevealed counterpart information are not
-included. Questions cannot append negotiation turns, send offers, or trigger rollouts.
+`coaching.py` leads with focus-related observed moments and supplies the exact counts
+and credit estimates to the LLM. Template feedback uses the same observations. Numeric
+feedback refuses active sessions and skips custom-term sessions. `SessionStore` saves
+transcripts and debrief artifacts; the profile feeds saved personal credit back to UCB.
 
-`Case.source_documents` is an optional list of `SourceDocument(name, text, visible_to)`.
-New file parses retain exact extracted originals. `ParsedCase.source_access` classifies
-each whole file as public, role-specific, or mixed; code maps that classification to role
-ids. Missing, ambiguous, unknown-role, and mixed classifications withhold the original.
-Pasted public/role instructions retain their original text with the declared role mapping.
-These fields default to empty lists so existing cases and parser fixtures remain valid.
-Source classification should be reviewed with the parsed case, as with role assignments.
+## Remaining evaluation integration
 
-Additional documents explicitly attached to the assistant are saved for that role only.
-The prompt retrieves question-relevant source excerpts (24,000-character budget), includes
-their filenames/character ranges, and sends at most the latest 12 saved chat messages.
-Case facts require source attribution; hypothetical replies are labeled as guesses; no
-numeric scores or probabilities are invented. The assistant has no live browsing tool.
-
-`AssistantConversation` is stored via SessionStore under `data/sessions/assistant/`, keyed
-by a hash of participant/case/role. Source attachments share that scope. Questions are
-saved as pending before a request, enabling retry without duplicating successful exchanges.
-Successful replies use one `LLM.complete` call through the existing low-effort client and
-usage accounting. Assistant messages never enter the counterpart's conversation.
-
-
-## Opportunity-based model (2026-10-28, in progress)
-
-The new specification supersedes the heuristic skill-score profile described above.
-`profiling/observations.py` implements all six numeric opportunity/occurrence detectors
-and the fact/rapport counts. `profiling/tagging.py` supplies a fixed role-scoped rubric
-and validates a whole annotation batch before applying it. `profiling/belief.py` contains
-the discounted Beta filter, exact credible intervals, empirical credit cost model, and
-UCB/greedy/random/no-focus policies. `profile.py` rebuilds that state from finished
-transcripts; the app displays probabilities, credible intervals, and opportunity counts.
-See decision 0008 for the two source-document discrepancies and missing-data behavior.
-
-The reward denominator is now the exact counterpart-feasible user optimum, found with
-an additive Pareto-frontier dynamic program. `simulation.episode_score` is terminal R;
-`episode_value` remains a raw-point helper but no longer credits unaccepted offers.
-`Turn.tags`, `Session.seed`, `Session.max_user_turns`, and counterpart focus/floor fields
-are additive schema changes. Invalid combined formal actions fail before session mutation.
-
-Still being integrated: counterpart hooks, fresh-selection/scoring counterfactual batches,
-empirical population costs, API spend reservation, and sim3 evaluation. Existing feedback
-rollouts still use raw points until that integration is complete.
+The API gateway remains `negotrain.llm`; offline tests inject `ScriptedLLM` and never
+spend API money. A persistent spend reservation/ledger and the sim3 experiment runner
+are still required. Evaluation must report ML-Q1 steering, ML-Q2 calibration/recovery,
+ML-Q3 five-session policy comparisons, both true-state error-cost reduction and held-out
+no-focus competence gain, and uncertainty over independently sampled users. Human
+transfer, human-like concession curves, and teammate tagging agreement require human
+data and must not be asserted from simulations.

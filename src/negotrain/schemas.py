@@ -178,6 +178,7 @@ class Turn(BaseModel):
     accept: bool = Field(default=False, description="Accepts the other side's latest offer")
     walk_away: bool = False
     tags: TurnTags | None = None
+    hook_applied: bool | None = None
     created_at: datetime = Field(default_factory=_now)
 
 

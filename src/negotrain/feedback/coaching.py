@@ -10,11 +10,12 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
-from negotrain.cases.offers import best_points
+from negotrain.cases.offers import feasible_best_points
 from negotrain.cases.scoring import efficiency, joint_points, max_joint_offer, score_offer
 from negotrain.feedback.rollouts import CounterfactualReport
 from negotrain.llm import LLM
 from negotrain.profiling.features import FLAG_DESCRIPTIONS, Features, extract_features, flags
+from negotrain.profiling.observations import ERRORS, observe
 from negotrain.schemas import Case, Session
 
 
@@ -59,7 +60,7 @@ def outcome_summary(session: Session, case: Case) -> OutcomeSummary:
         status=session.status,
         points=pts,
         reservation_value=me.reservation_value,
-        best_possible=best_points(case, me.id),
+        best_possible=feasible_best_points(case, me.id),
         surplus=None if pts is None else pts - me.reservation_value,
         efficiency=eff,
         their_points=theirs,
@@ -100,13 +101,16 @@ def _counterfactual_lines(report: CounterfactualReport | None) -> str:
     lines = []
     for e in report.estimates:
         lines.append(f"Turn {e.turn_index} ({e.description}):")
-        for v in e.values:
-            mean = "n/a" if v.mean is None else f"{v.mean:.0f}"
+        for v in [e.actual, e.best_alternative]:
+            if v is None:
+                continue
+            mean = "n/a" if v.mean is None else f"{v.mean:.3f}"
             offer = f" offer: {v.action.offer.terms}" if v.action.offer else ""
             lines.append(
-                f"  - {v.action.label}: mean {mean} pts over {len(v.outcomes)} rollouts, "
-                f"{v.agreements} agreements{offer}"
+                f"  - {v.action.label}: mean R={mean} over {len(v.outcomes)} fresh rollouts, "
+                f"{v.agreements} agreements{offer}; hindsight={v.action.hindsight}"
             )
+        lines.append(f"  Fresh-batch delta R={e.delta}; 95% paired bootstrap CI={e.delta_interval}")
     return "\n".join(lines)
 
 
@@ -177,6 +181,15 @@ Counterpart behavior profile: {dials}
 # Counterfactual simulation (alternatives played forward against the same counterpart)
 {_counterfactual_lines(report)}
 
+# Focus
+{session.counterpart_profile.focus if session.counterpart_profile else None}
+Lead with observed moments tied to this focus. Do not manufacture an example if none arose.
+Counterfactual values are normalized surplus R, not raw points. Hindsight alternatives use
+both sheets and must be labeled hindsight. Intervals with four rollouts are exploratory.
+
+# Opportunity/occurrence counts
+{observe(session, case).model_dump_json()}
+
 Write the debrief."""
 
 
@@ -237,7 +250,11 @@ def template_report(
     if report:
         ranked = sorted(
             (e for e in report.estimates if e.delta is not None),
-            key=lambda e: -(e.delta or 0),
+            key=lambda e: (
+                session.counterpart_profile is None
+                or session.counterpart_profile.focus not in e.errors,
+                -(e.delta or 0),
+            ),
         )
         for e in ranked[:3]:
             best = e.best_alternative
@@ -256,8 +273,14 @@ def template_report(
                         else "Your choice here held up well against the alternatives."
                     ),
                     evidence=(
-                        f"In simulation, what you did averaged {actual:.0f} points; "
-                        f"'{best.action.label}' averaged {best.mean:.0f}."
+                        f"Fresh rollouts: actual R={actual:.3f}; "
+                        f"'{best.action.label}' R={best.mean:.3f}; "
+                        f"95% paired bootstrap interval for delta: {e.delta_interval}. "
+                        + (
+                            "Hindsight: uses the counterpart sheet."
+                            if best.action.hindsight
+                            else ""
+                        )
                     ),
                 )
             )
@@ -272,6 +295,17 @@ def template_report(
         "impasse_with_zopa": "closing",
     }
     focus = profile_focus.get(flag_keys[0], "consistency") if flag_keys else "consistency"
+    observations = observe(session, case)
+    concrete = [
+        f"{ERRORS[key]}: {count.occurrences}/{count.opportunities} opportunities."
+        for key, count in observations.counts.items()
+        if key in ERRORS and count.occurrences
+    ]
+    if concrete:
+        improvements = concrete
+    if session.counterpart_profile and session.counterpart_profile.focus:
+        focus = session.counterpart_profile.focus
+        focus = ERRORS.get(focus, focus)
     return CoachingReport(
         headline=headline,
         strengths=strengths[:3] or ["You completed the rehearsal."],
@@ -288,6 +322,8 @@ def build_report(
     counterfactuals: CounterfactualReport | None = None,
     llm: LLM | None = None,
 ) -> CoachingReport:
+    if session.status not in ("agreed", "impasse"):
+        raise ValueError("coaching is available only after the session")
     outcome = outcome_summary(session, case)
     features = extract_features(session, case)
     flag_keys = flags(session, case, features)

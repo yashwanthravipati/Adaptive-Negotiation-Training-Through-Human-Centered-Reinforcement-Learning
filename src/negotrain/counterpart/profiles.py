@@ -12,7 +12,15 @@ import random
 
 from negotrain.schemas import CounterpartProfile
 
-DIALS = ("cooperativeness", "aggression", "anchoring", "concession_rate", "disclosure", "bluffing")
+DIALS = (
+    "cooperativeness",
+    "aggression",
+    "anchoring",
+    "concession_rate",
+    "disclosure",
+    "bluffing",
+    "concession_floor",
+)
 
 TIERS: dict[int, CounterpartProfile] = {
     1: CounterpartProfile(
@@ -20,8 +28,9 @@ TIERS: dict[int, CounterpartProfile] = {
         tier=1,
         cooperativeness=0.9,
         aggression=0.1,
-        anchoring=0.2,
-        concession_rate=0.8,
+        anchoring=0.65,
+        concession_rate=0.08,
+        concession_floor=0.0,
         disclosure=0.9,
         bluffing=0.0,
     ),
@@ -30,8 +39,9 @@ TIERS: dict[int, CounterpartProfile] = {
         tier=2,
         cooperativeness=0.7,
         aggression=0.2,
-        anchoring=0.4,
-        concession_rate=0.6,
+        anchoring=0.75,
+        concession_rate=0.065,
+        concession_floor=0.025,
         disclosure=0.6,
         bluffing=0.1,
     ),
@@ -40,8 +50,9 @@ TIERS: dict[int, CounterpartProfile] = {
         tier=3,
         cooperativeness=0.5,
         aggression=0.4,
-        anchoring=0.6,
-        concession_rate=0.4,
+        anchoring=0.85,
+        concession_rate=0.05,
+        concession_floor=0.05,
         disclosure=0.4,
         bluffing=0.3,
     ),
@@ -50,8 +61,9 @@ TIERS: dict[int, CounterpartProfile] = {
         tier=4,
         cooperativeness=0.3,
         aggression=0.6,
-        anchoring=0.8,
-        concession_rate=0.25,
+        anchoring=0.93,
+        concession_rate=0.035,
+        concession_floor=0.075,
         disclosure=0.2,
         bluffing=0.5,
     ),
@@ -60,12 +72,28 @@ TIERS: dict[int, CounterpartProfile] = {
         tier=5,
         cooperativeness=0.1,
         aggression=0.9,
-        anchoring=0.95,
-        concession_rate=0.1,
+        anchoring=1.0,
+        concession_rate=0.025,
+        concession_floor=0.1,
         disclosure=0.05,
         bluffing=0.8,
     ),
 }
+
+FOCUS_DIALS: dict[str, tuple[dict[str, float], str]] = {
+    "error:1": ({}, "hold until you concede or six turns pass"),
+    "error:2": ({}, "sometimes withhold reciprocal concessions"),
+    "error:3": ({"anchoring": 1.0}, "open at its most extreme package"),
+    "error:4": ({"anchoring": 0.6}, "hold an early low-surplus offer for two turns"),
+    "error:5": ({"anchoring": 0.6}, "leave an issue for you to raise"),
+    "error:6": ({}, "put two packages on the table early"),
+    "rapport": ({}, "respond to constructive engagement with a faster concession"),
+}
+
+
+def focused_profile(profile: CounterpartProfile) -> CounterpartProfile:
+    overrides, _ = FOCUS_DIALS.get(profile.focus, ({}, ""))
+    return profile.model_copy(update=overrides)
 
 
 def sample_profile(tier: int, rng: random.Random, jitter: float = 0.1) -> CounterpartProfile:
@@ -90,7 +118,7 @@ def describe(profile: CounterpartProfile) -> str:
             "Open with an ambitious offer close to your best possible outcome.",
         ),
         _band(
-            p.concession_rate,
+            min(1.0, p.concession_rate / 0.1),
             "Concede rarely and in small steps; make the other side work for every move.",
             "Concede gradually in modest steps, and ask for something in return.",
             "Concede readily when the other side gives reasons.",

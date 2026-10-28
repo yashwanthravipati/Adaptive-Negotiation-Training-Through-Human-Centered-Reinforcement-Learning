@@ -31,7 +31,7 @@ from negotrain.cases.parser import parse_case, parse_documents
 from negotrain.cases.scoring import score_offer
 from negotrain.counterpart import TIERS, CounterpartAgent, RuleBasedCounterpart
 from negotrain.counterpart.profiles import DIALS
-from negotrain.curriculum import ScenarioSpec, counterpart_for, next_scenario
+from negotrain.curriculum import ScenarioSpec, counterpart_for, focus_callout, next_scenario
 from negotrain.feedback import (
     CoachingReport,
     CounterfactualReport,
@@ -44,6 +44,7 @@ from negotrain.feedback import (
 from negotrain.llm import ClaudeCodeLLM, ClaudeLLM, LLMRefusal, check_api_key
 from negotrain.prep import Prep, build_prep, prep_key
 from negotrain.profiling import build_profile, extract_features
+from negotrain.profiling.tagging import tag_session
 from negotrain.schemas import Case, CounterpartProfile, Offer, Participant, Session, Turn
 from negotrain.sessions import SessionStore
 
@@ -58,6 +59,7 @@ DIAL_QUESTIONS = {
     "aggression": "How forceful or aggressive were they?",
     "disclosure": "How much did they share about their priorities?",
     "bluffing": "How much did they seem to exaggerate or bluff?",
+    "concession_floor": "How much value did they ultimately insist on keeping?",
 }
 
 
@@ -174,6 +176,16 @@ def make_counterpart(session: Session, case: Case):
 def history(pid: str) -> list[tuple[Session, Case]]:
     lib = library()
     return [(s, lib[s.case_id][0]) for s in SessionStore().for_participant(pid) if s.case_id in lib]
+
+
+def current_profile(pid: str, hist: list[tuple[Session, Case]]):
+    reports = {}
+    store = SessionStore()
+    for session, _ in hist:
+        debrief = store.load_artifact(session.id, "feedback", Debrief)
+        if debrief and debrief.counterfactuals:
+            reports[session.id] = debrief.counterfactuals
+    return build_profile(pid, hist, reports=reports)
 
 
 def go(page: str) -> None:
@@ -585,7 +597,8 @@ def _training_plan(p: Participant, case: Case, role_id: str) -> None:
             and s.counterpart_profile
         ):
             done[s.counterpart_profile.tier] = done.get(s.counterpart_profile.tier, 0) + 1
-    spec = next_scenario(build_profile(p.id, hist), hist, [case.id])
+    spec = next_scenario(current_profile(p.id, hist), hist, [case.id])
+    st.info("Practice focus: " + focus_callout(spec.focus))
     steps = [
         ScenarioSpec(tier=t, case_id=case.id, rationale=f"{title}: {why}")
         for t, title, why in TRAINING_PLAN
@@ -616,7 +629,7 @@ def _setup_rehearsal(p: Participant) -> None:
     st.subheader("Set up a rehearsal")
     st.caption("Tip: the training plan on the Prepare page starts rehearsals in one click.")
     hist = history(p.id)
-    profile = build_profile(p.id, hist)
+    profile = current_profile(p.id, hist)
     spec = next_scenario(profile, hist, [case.id])
     preset: ScenarioSpec | None = st.session_state.get("preset")
     mode = st.radio(
@@ -669,6 +682,12 @@ def start_rehearsal(
 def _counterpart_reply(session: Session, case: Case) -> None:
     with st.spinner(f"{case.role(session.counterpart_role_id).name} is responding…"):
         try:
+            if (
+                online()
+                and session.counterpart_profile.focus == "rapport"
+                and any(t.speaker == "user" and t.tags is None for t in session.turns)
+            ):
+                tag_session(session, case, llm("low"))
             reply = make_counterpart(session, case).respond(session)
             session.add_turn(reply, case)
         except LLMRefusal:
@@ -904,8 +923,11 @@ def page_feedback() -> None:
     outcome_metrics(session, case)
 
     debrief = store.load_artifact(session.id, "feedback", Debrief)
+    if debrief and debrief.counterfactuals and debrief.counterfactuals.reward != "surplus_share":
+        st.info("Regenerate this older debrief to use the current surplus-share reward.")
+        debrief = None
     if session.has_custom_terms:
-        use_llm, cap, k, n, horizon = False, 3, 2, 1, 4
+        use_llm, cap, k, n = False, 3, 2, 4
         st.caption(
             "Custom proposals receive qualitative coaching. Point-based simulations "
             "are unavailable because these terms have no defined point values."
@@ -920,17 +942,16 @@ def page_feedback() -> None:
                     "Fast rule-based simulator (free)",
                 ],
                 # On a plan, ~30 rollout calls eat into rate limits: opt in, don't default.
-                index=0 if online() and not on_plan else 1,
+                index=1,
                 disabled=not online(),
             )
             use_llm = online() and sim_choice.startswith("Same")
-            c = st.columns(4)
+            c = st.columns(3)
             cap = c[0].number_input("Moments to analyze", 1, 5, 3)
             k = c[1].number_input("Alternatives each", 1, 4, 2)
-            n = c[2].number_input("Rollouts each", 1, 6, 2 if use_llm else 1)
-            horizon = c[3].number_input("AI turns per rollout", 2, 10, 4)
+            n = c[2].number_input("Rollouts per batch", 4, 5, 4)
             if use_llm:
-                calls = estimate_calls(int(cap), int(k), int(n), int(horizon)) + 1
+                calls = estimate_calls(int(cap), int(k), int(n), session.max_user_turns) + 1
                 if on_plan:
                     st.caption(
                         f"Up to ~{calls} Claude Code calls against your plan's limits, "
@@ -949,6 +970,9 @@ def page_feedback() -> None:
         ):
             calls_before = _total_calls()
             cost_before = _total_cost()
+            if online():
+                tag_session(session, case, llm("low"))
+                store.save(session)
             counterfactuals = analyze_session(
                 session,
                 case,
@@ -957,7 +981,6 @@ def page_feedback() -> None:
                 cap=int(cap),
                 k=int(k),
                 n=int(n),
-                horizon=int(horizon),
                 max_workers=3 if backend() == "claude-code" else 8,
             )
             report = build_report(session, case, counterfactuals, llm() if online() else None)
@@ -1067,8 +1090,8 @@ def _render_counterfactuals(
     st.caption(
         f"Each option was played forward {report.n_rollouts}× against "
         f"{'the same AI counterpart' if report.opponent == 'llm' else 'a rule-based simulator'}"
-        " by a simulated version of you. Points are your expected outcome; treat small "
-        "differences as noise."
+        " by a scripted user. Values are surplus share R. A separate fresh batch scores "
+        "the selected action and actual action; small-sample intervals are exploratory."
     )
     for e in report.estimates:
         turn = session.turns[e.turn_index]
@@ -1076,12 +1099,14 @@ def _render_counterfactuals(
             delta = e.delta
             head = f"**Turn {e.turn_index}: {md(e.description)}**"
             if delta is not None:
-                head += f" · best alternative {delta:+.0f} pts"
+                head += f" · selected action ΔR={delta:+.3f}"
             st.markdown(head)
             if turn.text:
                 st.caption(f"You said: “{md(turn.text)}”")
             rows = []
-            for v in e.values:
+            for v in [e.actual, e.best_alternative]:
+                if v is None:
+                    continue
                 a = v.action
                 what = (
                     a.offer.describe(case)
@@ -1094,13 +1119,15 @@ def _render_counterfactuals(
                 )
                 rows.append(
                     {
-                        "Option": a.label,
+                        "Option": a.label + (" (hindsight)" if a.hindsight else ""),
                         "Move": what,
-                        "Expected points": round(v.mean) if v.mean is not None else None,
+                        "Fresh mean R": round(v.mean, 3) if v.mean is not None else None,
                         "Deals": f"{v.agreements}/{len(v.outcomes)}",
                     }
                 )
             st.dataframe(rows, hide_index=True, width="stretch")
+            if e.delta_interval:
+                st.caption(f"95% paired bootstrap interval for ΔR: {e.delta_interval}")
             errors = sum(v.errors for v in e.values)
             if errors:
                 st.caption(f"{errors} rollout(s) failed (API errors) and were skipped.")
@@ -1110,7 +1137,7 @@ def page_profile() -> None:
     style.page_header("My profile", "Strengths, weaknesses, and what to practice next.", "Progress")
     p = _require_participant()
     hist = history(p.id)
-    prof = build_profile(p.id, hist)
+    prof = current_profile(p.id, hist)
     st.caption(
         f"Based on {prof.n_sessions} finished sessions. Estimates use opportunities "
         "and occurrences, with older evidence discounted once per session."

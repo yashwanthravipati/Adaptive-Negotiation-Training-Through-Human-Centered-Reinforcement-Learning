@@ -103,10 +103,10 @@ def test_counterpart_can_accept_custom_terms_without_substitution_or_private_lea
     assert case.role("candidate").confidential_brief not in system + str(messages)
 
 
-def test_counterpart_custom_counteroffer_survives_in_its_history(case):
+def test_prompt_only_custom_counteroffer_survives_in_its_history(case):
     response = move("I propose this combination.", {k: v for k, v in FULL.items() if k != "remote"})
     response["offer"].append({"issue_id": "remote", "custom_text": CUSTOM})
-    agent, session, llm = setup(case, [response, move("Any thoughts?")], enforce=True)
+    agent, session, llm = setup(case, [response, move("Any thoughts?")], enforce=False)
     reply = agent.respond(session)
     assert reply.offer == custom_offer()
     session.add_turn(reply, case)

@@ -155,7 +155,7 @@ def test_assistant_keeps_recent_history_and_labels_hypotheticals(case):
     )
     system, messages = llm.calls[0]
     assert "I want to ask about travel." in str(messages)
-    assert "hypothetical" in system and "even during rehearsal" in system
+    assert "hypothetical" in system and "do not suggest moves" in system
     assert "no live web search" in system
 
 

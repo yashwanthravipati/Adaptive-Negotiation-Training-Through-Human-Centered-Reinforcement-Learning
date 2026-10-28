@@ -154,6 +154,51 @@ def _offer(case: Case, combo: tuple[str, ...]) -> Offer:
     return Offer(terms={i.id: o for i, o in zip(case.issues, combo, strict=False)})
 
 
+def listed_packages(case: Case, role_id: str) -> list[tuple[Offer, float, float]]:
+    """Exact valid package table for focus hooks and synthetic-user simulation.
+
+    This helper may inspect both sheets; its scores must never enter a role's prompt.
+    Large spaces fail explicitly rather than returning a biased sampled optimum.
+    """
+    if space_size(case) > MAX_ENUMERATE:
+        raise ValueError(f"package table exceeds {MAX_ENUMERATE} combinations")
+    issues = tuple((i.id, tuple(i.option_ids())) for i in case.issues)
+    roles = (case.role(role_id), case.other_role(role_id))
+    tables = tuple(
+        tuple(tuple(role.points[i.id][o] for o in i.option_ids()) for i in case.issues)
+        for role in roles
+    )
+    banned = tuple(
+        tuple(
+            tuple(
+                sorted({o for c in role.constraints if c.hard for o in c.disallowed.get(i.id, [])})
+            )
+            for i in case.issues
+        )
+        for role in roles
+    )
+    return [
+        (Offer(terms=dict(terms)), own, other)
+        for terms, own, other in _package_table(issues, tables, banned)
+    ]
+
+
+@lru_cache(maxsize=32)
+def _package_table(issues: tuple, tables: tuple, banned: tuple) -> tuple:
+    out = []
+    for indices in itertools.product(*(range(len(opts)) for _, opts in issues)):
+        terms = tuple((key, opts[n]) for (key, opts), n in zip(issues, indices, strict=True))
+        if any(
+            option in role_banned[i]
+            for role_banned in banned
+            for i, (_, option) in enumerate(terms)
+        ):
+            continue
+        scores = [sum(role_tables[i][n] for i, n in enumerate(indices)) for role_tables in tables]
+        out.append((terms, *scores))
+    return tuple(out)
+
+
 def closest_offer(
     case: Case, role_id: str, min_points: float, target: Offer | None = None
 ) -> Offer | None:

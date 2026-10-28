@@ -66,8 +66,8 @@ The app runs locally for one person (no sign-in). Typical flow for a class simul
 4. **Feedback**: after each session: outcome vs walk-away and vs the best joint deal, a
    coaching report, and "moments that mattered" from counterfactual rollouts. Both sheets
    are revealed.
-5. **My profile**: skill scores with confidence, recurring error patterns, and the
-   recommended next rehearsal.
+5. **My profile**: Beta beliefs over six error rates, case-fact awareness, and rapport,
+   with credible intervals and a cost-weighted recommendation for the next rehearsal.
 6. **Real negotiation**: after the real simulation, log the outcome (including custom
    agreed terms) and how the other side behaved, compared with your rehearsals (sim-to-real gap).
 
@@ -94,9 +94,17 @@ use **Sources and context → Add source documents** in the panel (ZIPs work too
 Offline, saved chat and sources remain readable; choose Claude Code or an API key in
 Settings for new AI replies.
 
-Feedback with the Claude counterpart makes up to ~37 API calls per session at the default
-settings; the page shows an estimate before running (not yet measured live), and the free
-rule-based simulator is the alternative. Data lands in `data/sessions/` (gitignored).
+Counterfactual feedback uses four rollouts per candidate plus independent fresh batches
+for scoring. It reports surplus-share differences and uncertainty, labels hindsight
+alternatives, and runs after the session. The free rule-based simulator is the default;
+full LLM rollouts can be expensive, and the page estimates calls before running them.
+Data lands in `data/sessions/` (gitignored). A visible deadline ends rehearsals after
+20 user moves and the corresponding counterpart responses.
+
+The current reimplementation follows [`docs/new-spec.md`](docs/new-spec.md) and
+[`docs/report.tex`](docs/report.tex). See [decision 0008](plan/decisions/0008-opportunity-beliefs-and-evaluation-contract.md)
+for their differing belief/objective definitions. Simulation evaluation and persistent
+API budget enforcement are still being integrated; there are no new performance claims yet.
 
 ## Terminal
 
@@ -118,7 +126,7 @@ src/negotrain/        Python package
   cases/              case loading, LLM parser, scoring, offer search
   counterpart/        LLM agent, rule-based twin, concession schedule, profiles and tiers
   feedback/           critical turns, counterfactual rollouts, coaching report
-  profiling/          behavioral features, error flags, negotiator profile
+  profiling/          opportunity detectors, tagging, Beta beliefs, cost-weighted planning
   curriculum/         tailored scenario selection
   simulation.py       simulated negotiators and the agent-vs-agent episode runner
   sessions.py         session, artifact, and participant persistence

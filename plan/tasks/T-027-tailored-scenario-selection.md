@@ -25,3 +25,9 @@ Start rule-based: for example, an early conceder faces high-anchoring, slow-conc
   discounted Beta beliefs, cost-weighted UCB/baselines, profile UI with credible intervals,
   and visible 20-user-move deadline. Replaces heuristic skill scores. Source-document
   discrepancies and remaining integration are recorded in decision 0008.
+- 2026-10-28: Reimplementation milestone: independent tier floors/rates, visible deadline,
+  code-selected hybrid formal actions, all focus hooks with feasibility tracking; terminal-R
+  counterfactuals, M=4 defaults, disjoint selection/scoring seeds, paired bootstrap intervals,
+  explicit hindsight labels, focus-first prep/feedback and personal credit fed into UCB.
+  131 offline tests passed, including randomized walk-away invariants and a noisy ranking
+  reversal test. API spend remains $0. Population calibration and sim3 evaluation pending.

@@ -8,6 +8,8 @@ and recovered.
 
 from __future__ import annotations
 
+import random
+
 from negotrain.cases.offers import best_points, closest_offer, points, surplus_share
 from negotrain.cases.scoring import score_offer
 from negotrain.counterpart.rule_based import Counterpart
@@ -28,7 +30,9 @@ class ScriptedUser:
         step: float = 0.08,
         start_points: float | None = None,
         asks_questions: bool = False,
+        rng: random.Random | None = None,
     ):
+        self.rng = rng
         self.case = case
         self.role = case.role(role_id)
         rv = self.role.reservation_value
@@ -45,6 +49,10 @@ class ScriptedUser:
     def respond(self, session: Session) -> Turn:
         index = len(session.turns)
         level = self.aspiration()
+        if self.rng is not None:
+            level = max(
+                self.role.reservation_value, level + self.rng.uniform(-0.025, 0.025) * self.span
+            )
         self.turns_taken += 1
         theirs = session.latest_offer_from("counterpart")
         if theirs is not None and theirs.is_complete(self.case):

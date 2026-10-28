@@ -1,22 +1,19 @@
-"""Counterfactual credit assignment (T-021).
+"""Post-session credit in units of R, with separate selection and scoring batches.
 
-At each critical turn, fork the transcript, try the actual action and up to K alternatives
-(firmer, softer, trade across issues, ask instead of offering, ...), and play each forward N
-times against the counterpart with a simulated user (simulation.ScriptedUser) whose
-concession step is taken from this user's own behavior. LLM calls are capped at ``horizon``
-turns per rollout; an unfinished rollout is then played to the end by the rule-based
-counterpart with the same profile and schedule, which is free. The value of an action is the
-user's mean points over its rollouts; the gap between the best alternative and the actual
-action says how much that decision mattered. Runs after the session, never live
-(decision 0002).
+The fixed rollout user is ScriptedUser, with the prefix-derived concession pace and
+seeded ±2.5% aspiration noise. Full transcript prefixes, setting, tags, deadline and
+counterpart seed are restored. Every rollout continues to agreement or the deadline
+against the selected counterpart; no standing-offer credit or cheaper tail policy.
 """
 
 from __future__ import annotations
 
-import math
+import random
+import statistics
 import time
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
+from typing import Literal
 
 from pydantic import BaseModel
 
@@ -29,15 +26,13 @@ from negotrain.cases.offers import (
     points,
 )
 from negotrain.cases.scoring import score_offer
-from negotrain.counterpart.profiles import TIERS
-from negotrain.counterpart.rule_based import Counterpart, RuleBasedCounterpart
+from negotrain.counterpart.rule_based import Counterpart
 from negotrain.feedback.critical import CriticalTurn, critical_turns
 from negotrain.profiling.features import extract_features
-from negotrain.schemas import Case, Offer, Session, Turn
-from negotrain.simulation import ScriptedUser, episode_value, run_episode
+from negotrain.schemas import Case, Offer, Session, Turn, TurnTags
+from negotrain.simulation import ScriptedUser, episode_score, run_episode
 
 CounterpartFactory = Callable[[], Counterpart]
-FINISH_TURNS = 40
 
 
 class Action(BaseModel):
@@ -47,6 +42,8 @@ class Action(BaseModel):
     accept: bool = False
     walk_away: bool = False
     actual: bool = False
+    hindsight: bool = False
+    tags: TurnTags | None = None
 
 
 class ActionValue(BaseModel):
@@ -64,39 +61,46 @@ class TurnEstimate(BaseModel):
     turn_index: int
     kind: str
     description: str
-    values: list[ActionValue]  # values[0] is the actual action
+    errors: list[str] = []
+    values: list[ActionValue]  # Q estimates used only for candidate selection
+    selected_index: int = 0
+    scored_actual: ActionValue | None = None
+    scored_selected: ActionValue | None = None
+    selection_seeds: list[int] = []
+    scoring_seeds: list[int] = []
+    delta_interval: tuple[float, float] | None = None
 
     @property
     def actual(self) -> ActionValue:
-        return self.values[0]
+        return self.scored_actual or self.values[0]
 
     @property
     def best_alternative(self) -> ActionValue | None:
-        alts = [v for v in self.values[1:] if v.mean is not None]
-        return max(alts, key=lambda v: v.mean) if alts else None
+        return self.scored_selected
 
     @property
     def delta(self) -> float | None:
-        """Best alternative minus actual, in the user's points (positive = room to improve)."""
-        best = self.best_alternative
-        if best is None or self.actual.mean is None:
+        if self.scored_selected is None or self.scored_actual is None:
             return None
-        return best.mean - self.actual.mean
+        if self.scored_selected.mean is None or self.scored_actual.mean is None:
+            return None
+        return self.scored_selected.mean - self.scored_actual.mean
 
 
 class CounterfactualReport(BaseModel):
     session_id: str
     opponent: str
     n_rollouts: int
-    horizon: int
     estimates: list[TurnEstimate]
     seconds: float
+    reward: Literal["points", "surplus_share"] = "points"  # old artifacts used raw points
+    rollout_policy: str = "scripted-prefix-pace; seeded aspiration noise +/-0.025 own span"
     skipped_reason: str | None = None
 
 
-def estimate_calls(n_turns: int, k: int, n: int, horizon: int) -> int:
-    """Upper-ish bound on counterpart LLM calls for an analysis (retries excluded)."""
-    return n_turns * (k + 1) * n * math.ceil(horizon / 2)
+def estimate_calls(n_turns: int, k: int, n: int, remaining_user_turns: int = 20) -> int:
+    """Worst-case calls: actual+k selection candidates, then two fresh scoring batches."""
+    return n_turns * (k + 3) * n * (remaining_user_turns + 1)
 
 
 def _actual_action(turn: Turn) -> Action:
@@ -107,6 +111,7 @@ def _actual_action(turn: Turn) -> Action:
         accept=turn.accept,
         walk_away=turn.walk_away,
         actual=True,
+        tags=turn.tags,
     )
 
 
@@ -164,6 +169,7 @@ def alternatives(session: Session, case: Case, turn_index: int, k: int = 3) -> l
             "What if we trade: I give ground where it matters to you, you give where it "
             "matters to me?",
             best_joint_offer(case, me, ref_pts),
+            hindsight=True,
         )
         if turn.accept:
             add(
@@ -208,10 +214,10 @@ def rollout(
     action: Action,
     make_counterpart: CounterpartFactory,
     *,
-    horizon: int,
     step: float,
+    seed: int,
 ) -> tuple[float, bool]:
-    """Play ``action`` at ``turn_index`` and continue; returns (user points, agreed)."""
+    """Play ``action`` at ``turn_index`` and continue; returns (terminal R, agreed)."""
     if session.has_custom_terms or (action.offer is not None and action.offer.custom_terms):
         raise ValueError("numeric rollouts cannot value custom terms")
     fork = _fork(session, case, turn_index)
@@ -223,6 +229,7 @@ def rollout(
             offer=action.offer,
             accept=action.accept,
             walk_away=action.walk_away,
+            tags=action.tags,
         ),
         case,
     )
@@ -231,14 +238,21 @@ def rollout(
     latest = fork.latest_offer_from("user")
     if latest is not None and latest.is_complete(case):
         start = points(case, me, latest)
-    user = ScriptedUser(case, me, step=step, start_points=start)
-    user.turns_taken = 1  # it has just made its move at `start`
-    run_episode(case, fork, make_counterpart(), user, max_turns=horizon)
+    user = ScriptedUser(case, me, step=step, start_points=start, rng=random.Random(seed))
+    user.turns_taken = 1
+    run_episode(
+        case,
+        fork,
+        make_counterpart(),
+        user,
+        max_turns=2 * (fork.max_user_turns - fork.user_turns) + 2,
+    )
     if fork.status == "active":
-        profile = session.counterpart_profile or TIERS[3]
-        finisher = RuleBasedCounterpart(case, session.counterpart_role_id, profile)
-        run_episode(case, fork, finisher, user, max_turns=FINISH_TURNS)
-    return episode_value(case, fork), fork.status == "agreed"
+        fork.status = "impasse"
+    value = episode_score(case, fork)
+    if value is None:
+        raise ValueError("rollout produced an unscored custom agreement")
+    return value, fork.status == "agreed"
 
 
 def estimate_turn_values(
@@ -248,49 +262,60 @@ def estimate_turn_values(
     make_counterpart: CounterpartFactory,
     *,
     k: int = 2,
-    n: int = 2,
-    horizon: int = 4,
+    n: int = 4,
     executor: ThreadPoolExecutor | None = None,
 ) -> TurnEstimate:
+    if n < 1:
+        raise ValueError("n must be positive")
     actions = [_actual_action(session.turns[critical.turn_index])]
     actions += alternatives(session, case, critical.turn_index, k)
-    step = _user_step(session, case)
+    prefix = _fork(session, case, critical.turn_index)
+    step = _user_step(prefix, case)  # never fit a rollout user on future transcript turns
+    rng = random.Random(session.seed + 104729 * (critical.turn_index + 1))
+    seeds = rng.sample(range(2**31), 2 * n)
+    selection, scoring = seeds[:n], seeds[n:]
 
-    def run(action: Action) -> tuple[float, bool] | None:
-        try:
+    def batch(action: Action, batch_seeds: list[int]) -> ActionValue:
+        def run(seed: int) -> tuple[float, bool]:
+            # Failed rollouts fail the estimate: silently dropping them biases Q.
             return rollout(
-                session,
-                case,
-                critical.turn_index,
-                action,
-                make_counterpart,
-                horizon=horizon,
-                step=step,
+                session, case, critical.turn_index, action, make_counterpart, step=step, seed=seed
             )
-        except Exception:  # noqa: BLE001 - one failed rollout (refusal, API error) shouldn't sink the report
-            return None
 
-    jobs = [(a, i) for a in actions for i in range(n)]
-    results = (
-        list(executor.map(lambda job: run(job[0]), jobs)) if executor else [run(a) for a, _ in jobs]
-    )
-    values = []
-    for a in actions:
-        mine = [r for (b, _), r in zip(jobs, results, strict=False) if b is a]
-        ok = [r for r in mine if r is not None]
-        values.append(
-            ActionValue(
-                action=a,
-                outcomes=[v for v, _ in ok],
-                agreements=sum(1 for _, agreed in ok if agreed),
-                errors=len(mine) - len(ok),
-            )
+        results = (
+            list(executor.map(run, batch_seeds)) if executor else [run(s) for s in batch_seeds]
         )
+        return ActionValue(
+            action=action,
+            outcomes=[v for v, _ in results],
+            agreements=sum(agreed for _, agreed in results),
+        )
+
+    values = [batch(a, selection) for a in actions]
+    selected = max(range(len(values)), key=lambda i: values[i].mean)
+    actual = batch(actions[0], scoring)
+    best = batch(actions[selected], scoring)
+    differences = [b - a for a, b in zip(actual.outcomes, best.outcomes, strict=True)]
+    interval = None
+    if n >= 2:
+        # Paired bootstrap with common random numbers within each fresh batch.
+        bootstrap_rng = random.Random(seeds[-1])
+        samples = sorted(
+            statistics.mean(bootstrap_rng.choices(differences, k=n)) for _ in range(2000)
+        )
+        interval = (samples[49], samples[1949])
     return TurnEstimate(
         turn_index=critical.turn_index,
         kind=critical.kind,
         description=critical.description,
+        errors=critical.errors,
         values=values,
+        selected_index=selected,
+        scored_actual=actual,
+        scored_selected=best,
+        selection_seeds=selection,
+        scoring_seeds=scoring,
+        delta_interval=interval,
     )
 
 
@@ -300,37 +325,35 @@ def analyze_session(
     make_counterpart: CounterpartFactory,
     *,
     opponent: str = "llm",
-    cap: int = 3,
+    cap: int | None = None,
     k: int = 2,
-    n: int = 2,
-    horizon: int = 4,
+    n: int = 4,
     max_workers: int = 8,
 ) -> CounterfactualReport:
+    if session.status not in ("agreed", "impasse"):
+        raise ValueError("counterfactual coaching is available only after the session")
     if session.has_custom_terms:
         return CounterfactualReport(
             session_id=session.id,
             opponent=opponent,
             n_rollouts=0,
-            horizon=horizon,
+            reward="surplus_share",
             estimates=[],
             seconds=0.0,
             skipped_reason="Point-based simulations are unavailable for custom terms. "
             "Your full proposals are included in the qualitative coaching report.",
         )
     start = time.monotonic()
-    turns = critical_turns(session, case, cap=cap)
     with ThreadPoolExecutor(max_workers=max_workers) as pool:
         estimates = [
-            estimate_turn_values(
-                session, case, c, make_counterpart, k=k, n=n, horizon=horizon, executor=pool
-            )
-            for c in turns
+            estimate_turn_values(session, case, c, make_counterpart, k=k, n=n, executor=pool)
+            for c in critical_turns(session, case, cap=cap)
         ]
     return CounterfactualReport(
         session_id=session.id,
         opponent=opponent,
         n_rollouts=n,
-        horizon=horizon,
+        reward="surplus_share",
         estimates=estimates,
         seconds=time.monotonic() - start,
     )

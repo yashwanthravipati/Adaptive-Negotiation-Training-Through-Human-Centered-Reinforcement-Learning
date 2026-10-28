@@ -1,73 +1,68 @@
-"""Critical-turn detection (T-020): the user decisions worth counterfactual analysis.
-
-Rule-based on structured offers: the first offer, responses to the counterpart's anchor,
-concessions (the user's claim drops from their previous offer), accepting, and walking away.
-Capped per session because each critical turn costs K x N rollouts.
-"""
+"""Formal user actions and detector firings, with focus-first analysis ordering."""
 
 from __future__ import annotations
 
-from typing import Literal
+from pydantic import BaseModel, Field
 
-from pydantic import BaseModel
-
-from negotrain.cases.offers import claim
+from negotrain.cases.offers import points
+from negotrain.profiling.observations import ERRORS, observe
 from negotrain.schemas import Case, Session
-
-CriticalKind = Literal["first_offer", "anchor_response", "concession", "accept", "walk_away"]
-
-# Lower is more important when the cap bites.
-_PRIORITY = {"accept": 0, "walk_away": 0, "first_offer": 1, "anchor_response": 2, "concession": 3}
 
 
 class CriticalTurn(BaseModel):
     turn_index: int
-    kind: CriticalKind
+    kind: str
     description: str
-    weight: float = 0.0  # e.g. concession size, used to rank within a kind
+    weight: float = 0.0
+    errors: list[str] = Field(default_factory=list)
 
 
-def critical_turns(session: Session, case: Case, cap: int = 3) -> list[CriticalTurn]:
+def critical_turns(session: Session, case: Case, cap: int | None = None) -> list[CriticalTurn]:
     if session.has_custom_terms:
-        return []  # Numeric counterfactuals cannot value custom proposals.
-    me = session.user_role_id
-    found: list[CriticalTurn] = []
-    previous_claim: float | None = None
-    seen_their_offer = False
+        return []
+    observation = observe(session, case)
+    found = []
+    previous = None
+    seen_counterpart = False
     for turn in session.turns:
         if turn.speaker == "counterpart":
-            seen_their_offer = seen_their_offer or turn.offer is not None
+            seen_counterpart |= turn.offer is not None
+            continue
+        errors = [key for key in ERRORS if turn.index in observation.counts[key].turns]
+        if not (turn.offer or turn.accept or turn.walk_away or errors):
             continue
         if turn.accept:
-            found.append(
-                CriticalTurn(
-                    turn_index=turn.index, kind="accept", description="You accepted their offer"
-                )
-            )
+            kind, description = "accept", "You accepted their offer"
         elif turn.walk_away:
-            found.append(
-                CriticalTurn(turn_index=turn.index, kind="walk_away", description="You walked away")
-            )
-        elif turn.offer is not None:
-            current = claim(case, me, turn.offer)
-            if previous_claim is None:
-                kind = "anchor_response" if seen_their_offer else "first_offer"
-                text = (
-                    "Your first offer, in response to their opening"
-                    if seen_their_offer
-                    else "Your opening offer"
-                )
-                found.append(CriticalTurn(turn_index=turn.index, kind=kind, description=text))
-            elif current < previous_claim - 1e-9:
-                size = previous_claim - current
-                found.append(
-                    CriticalTurn(
-                        turn_index=turn.index,
-                        kind="concession",
-                        description=f"You conceded {size:.0%} of your range",
-                        weight=size,
-                    )
-                )
-            previous_claim = current
-    ranked = sorted(found, key=lambda c: (_PRIORITY[c.kind], -c.weight, c.turn_index))[:cap]
-    return sorted(ranked, key=lambda c: c.turn_index)
+            kind, description = "walk_away", "You walked away"
+        elif previous is None and turn.offer:
+            kind = "anchor_response" if seen_counterpart else "first_offer"
+            description = "Your first offer"
+        elif (
+            turn.offer
+            and previous
+            and turn.offer.is_complete(case)
+            and previous.is_complete(case)
+            and points(case, session.user_role_id, turn.offer)
+            < points(case, session.user_role_id, previous)
+        ):
+            kind, description = "concession", "Your concession"
+        else:
+            kind, description = "offer", "Your proposal"
+        if turn.offer:
+            previous = turn.offer
+        if errors:
+            description += ": " + ", ".join(ERRORS[k].lower() for k in errors)
+        found.append(
+            CriticalTurn(turn_index=turn.index, kind=kind, description=description, errors=errors)
+        )
+    focus = session.counterpart_profile.focus if session.counterpart_profile else None
+    found.sort(
+        key=lambda c: (
+            focus not in c.errors,
+            not c.errors,
+            c.kind not in ("accept", "walk_away"),
+            c.turn_index,
+        )
+    )
+    return found if cap is None else found[:cap]

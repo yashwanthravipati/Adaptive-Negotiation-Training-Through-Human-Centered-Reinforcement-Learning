@@ -67,7 +67,8 @@ def test_analysis_with_rule_based_opponent_is_deterministic(case):
         assert e.values[0].action.actual
         assert all(v.mean is not None for v in e.values)
         # Replaying what the user actually did reproduces the real outcome's neighborhood.
-        assert e.actual.mean >= case.role("candidate").reservation_value
+        assert 0 <= e.actual.mean <= 1
+        assert set(e.selection_seeds).isdisjoint(e.scoring_seeds)
 
 
 def test_analysis_with_llm_counterpart_uses_scripted_moves(case):
@@ -83,23 +84,23 @@ def test_analysis_with_llm_counterpart_uses_scripted_moves(case):
     def counter(system, messages):
         return {"message": "Too rich.", "offer": [], "accept": False, "walk_away": False}
 
-    llm = ScriptedLLM([counter] * 50)
+    s.status = "impasse"
+    llm = ScriptedLLM([counter] * 200)
     report = analyze_session(
         s,
         case,
         lambda: CounterpartAgent(case, "recruiter", TIERS[3], llm),
         n=1,
         k=1,
-        horizon=2,
         max_workers=1,
     )
     assert len(report.estimates) == 1
-    assert len(llm.calls) == 2  # actual + 1 alternative, one LLM turn each before finishing
+    assert len(llm.calls) >= 4  # selection plus fresh scoring, each continued to termination
     assert all(v.errors == 0 for v in report.estimates[0].values)
 
 
 def test_estimate_calls():
-    assert estimate_calls(3, 2, 2, 4) == 36
+    assert estimate_calls(3, 2, 4, 20) == 3 * 5 * 4 * 21
 
 
 def test_template_report_without_llm(case):

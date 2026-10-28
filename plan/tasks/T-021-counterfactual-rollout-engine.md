@@ -23,3 +23,9 @@ At each critical turn, propose K alternative user actions (firmer, softer, logro
 ## Log
 - 2026-10-25: MVP branch: feedback/rollouts.py; code-built alternatives; LLM counterpart for `horizon` turns then rule-based finisher; threaded; cost/latency shown in app; saved to data/sessions/feedback/. Default 3 turns x 3 actions x 2 rollouts x 2 LLM turns = 36 calls. Not validated (T-022).
 - 2026-10-26: First live run (Vincent) on a tier-3 cloudline session (14 turns, agreed): 3 critical turns, k=2, n=2, horizon=4, LLM counterpart at effort=low. 32 calls (estimate 36), 43 s wall clock, $0.83, so about $0.026 per call (views.EST_COST_PER_CALL = $0.03 is about right). 0 rollout errors. Deltas: anchor response +400 (trade across issues 7200 vs actual 6800), concession 0 (firmer offer tied with actual at 7200), accept +600 (trade across issues 7300 vs actual 6700). With n=2 these are noisy; a tie like the concession turn is not distinguishable from no effect. LLM coaching report built on top (effort=medium): 26 s, $0.07, source=llm; its claims checked against the transcript and both sheets were all correct.
+- 2026-10-28: Reimplementation milestone: independent tier floors/rates, visible deadline,
+  code-selected hybrid formal actions, all focus hooks with feasibility tracking; terminal-R
+  counterfactuals, M=4 defaults, disjoint selection/scoring seeds, paired bootstrap intervals,
+  explicit hindsight labels, focus-first prep/feedback and personal credit fed into UCB.
+  131 offline tests passed, including randomized walk-away invariants and a noisy ranking
+  reversal test. API spend remains $0. Population calibration and sim3 evaluation pending.

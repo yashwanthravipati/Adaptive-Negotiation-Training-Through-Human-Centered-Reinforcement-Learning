@@ -66,8 +66,8 @@ def test_schedule_rejects_offers_below_aspiration(case):
     rich = {"salary": "s120", "bonus": "b0", "remote": "r0", "start": "w4", "vacation": "v15"}
     agent, session, llm = setup(case, [move(offer=cheap), move(offer=rich)], enforce=True)
     turn = agent.respond(session)
-    assert turn.offer == Offer(terms=rich)
-    assert "at least" in llm.calls[1][1][-1]["content"]
+    assert score_offer(case, "recruiter", turn.offer).points >= agent.minimum(session)
+    assert len(llm.calls) == 1  # formal action is selected before the LLM writes dialogue
 
 
 def test_private_note_states_minimum_but_not_the_users_sheet(case):
