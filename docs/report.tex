@@ -84,6 +84,28 @@ The coach turns its belief into the next setting, and turns each transcript into
 where $b_0$ is the starting belief, Update is equation~\eqref{eq:update}, $\pi$ is the \emph{policy} that picks the setting, and Feedback writes the report.
 Feedback works by replaying the negotiation from key turns with the user's move swapped for an alternative, and reporting how much each alternative would have changed $R$.
 
+\paragraph{Implemented policy and comparison baselines.}
+For the experiments, we instantiate the abstract policy above with a cost-weighted
+upper-confidence rule (UCB). We extend the focus set to $\mathcal{F}$, containing the six
+mistakes, case-fact targets and rapport. For each target $f$, let $d_{t,f}$ be its posterior
+mean deficit (the mistake probability, or one minus the success probability for facts
+and rapport), and $v_{t,f}$ its posterior standard deviation. Let $w_{t,f}$ estimate the
+counterfactual score loss associated with that deficit, initialized from population
+calibration and updated with the user's own estimates, and let $\bar{o}_f$ be the
+calibrated number of opportunities under focused practice. The adaptive rule selects
+\begin{equation}
+f_t^{\mathrm{UCB}} = \arg\max_{f\in\mathcal{F}}
+ w_{t,f}\,\bar{o}_f\big(d_{t,f}+\kappa v_{t,f}\big), \qquad \kappa\geq 0.
+\end{equation}
+The uncertainty bonus prioritizes potentially costly but poorly measured weaknesses;
+this score is a practice-priority heuristic, not an identified causal learning gain.
+We compare it with \emph{greedy}, which sets $\kappa=0$; \emph{random focus}, which samples
+uniformly from $\mathcal{F}$; and \emph{no focus}, which sets $f=\varnothing$.
+Greedy also updates its beliefs and costs after each rehearsal. All four policies use
+the same tier schedule and receive post-session feedback. Hyperparameters are selected
+on an independent development population; if the selected $\kappa$ is zero, UCB and
+greedy coincide on identical observations.
+
 \paragraph{Learning objectives.}
 A user's \emph{competence} is their expected score on a fixed set $\mathcal{D}$ of held-out cases and tiers, played with no focus and no feedback. Formally,
 \begin{equation}
