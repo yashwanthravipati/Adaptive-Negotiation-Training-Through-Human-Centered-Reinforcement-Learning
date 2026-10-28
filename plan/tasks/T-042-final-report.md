@@ -30,3 +30,4 @@ Structure from the course guidelines; reuse docs/results/*.md.
 - 2026-10-28: Removed confidence-interval and bootstrap references from the short report's prose and table at the user's request; mean gains and the underlying detailed evaluation artifacts are unchanged.
 - 2026-10-28: Reworded the policy comparison to explicitly describe differences in mean G gain, using the user's requested phrasing.
 - 2026-10-28: Explained that the zero uncertainty bonus was a tentative development choice because it maximized simulated error-cost reduction, making adaptive and greedy the same rule in this evaluation.
+- 2026-10-28: Connected the modest differences in mean G gain across policies to future system-prompt iteration and other ways to improve the performance metric, without claiming that the measured means were identical.
