@@ -27,3 +27,4 @@ Structure from the course guidelines; reuse docs/results/*.md.
 - 2026-10-28: At the user's request, removed the offline-results and interpretation paragraphs from the short report, rewrote the design around Simulation 3 materials and eight sampled LLM personas tested under all four mechanisms, and renamed Live results to Results. Added next steps retaining the formalism while exploring coach policies based on observed learning gains. Detailed diagnostics remain in docs/results/sim3_evaluation.md.
 - 2026-10-28: Rephrased the performance definition to use "G as the average score" as requested.
 - 2026-10-28: Added iteration on the coach's system prompts as a possible next step for improving feedback clarity and usefulness.
+- 2026-10-28: Removed confidence-interval and bootstrap references from the short report's prose and table at the user's request; mean gains and the underlying detailed evaluation artifacts are unchanged.
